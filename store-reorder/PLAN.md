@@ -45,10 +45,7 @@ localStorage. This alone replaces the memory-walk.
    ready to print or paste into WhatsApp.
 6. **Backup** — export/import all data as one JSON file so nothing is lost if
    the browser clears.
-7. **Photo count import (wow feature)** — photograph the handwritten count
-   sheet, ask ChatGPT for JSON in the app's format, paste it into the app's
-   import box (with validation + a copyable prompt template).
-8. **Deployed on GitHub Pages.**
+7. **Deployed on GitHub Pages.**
 
 **MVP is done when:** an employee counts the shelves on a phone, the owner
 opens the site, sees what's low, and sends each distributor order in five
@@ -133,7 +130,7 @@ Valuable, but nothing here blocks daily use. Build only after P2 is real.
 
 | Tier | What | Why this order |
 |---|---|---|
-| **P0 (MVP)** | Product list w/ manual par (cases+bottles), CSV import, count screen, low-stock alerts + order suggestion, order sheets, backup, photo import, GitHub Pages | Usable website now; replaces the memory-walk |
+| **P0 (MVP)** | Product list w/ manual par (cases+bottles), CSV import, count screen, low-stock alerts + order suggestion, order sheets, backup, GitHub Pages | Usable website now; replaces the memory-walk |
 | **P1** | Supabase sync, from-home dashboard, running stock, login | "Check inventory online" — foundation for multi-store |
 | **P2** | 3-store visibility, auto partner-check on low stock, reservations w/ approve, status-driven transfers, balances | The triangle + efficient stock use across stores |
 | **P3** | Reports, AI reservation triage, seasonal placement suggestions, combined orders | Nice-to-have intelligence on top of real data |
