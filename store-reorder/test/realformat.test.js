@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { importExport } from "../app/js/importer.js";
-import { lowStock, lowStockTiers, TIER_FAST, TIER_STEADY, zeroStock, needsInventoryFix, effectivePar, orderSuggestions } from "../app/js/reorder.js";
+import { lowStock, lowStockTiers, TIER_FAST, TIER_STEADY, needsInventoryFix, effectivePar, orderSuggestions } from "../app/js/reorder.js";
 import { sheetText, explainSuggestion } from "../app/js/ordersheet.js";
 
 // Anonymized sample with the REAL LiquorPOS export structure: BRAND, DESCRIP,
@@ -66,10 +66,8 @@ describe("real LiquorPOS format", () => {
     const dead = Object.values(products).filter((p) => p.avgMonthlyUnits === 0 && p.parUnits == null);
     expect(dead.length).toBeGreaterThan(0);
     const lowKeys = new Set(lowStock(products, 1).map((p) => p.barcode));
-    const zeroKeys = new Set(zeroStock(products).map((p) => p.barcode));
     for (const p of dead) {
       expect(lowKeys.has(p.barcode)).toBe(false);
-      expect(zeroKeys.has(p.barcode)).toBe(false);
     }
   });
 
@@ -110,11 +108,32 @@ describe("real LiquorPOS format", () => {
     );
   });
 
-  test("low list is sorted by sales velocity, fastest first", () => {
+  test("low list is sorted by urgency (runway ascending), velocity breaking ties", () => {
     const low = lowStock(products, 1);
     for (let i = 1; i < low.length; i++) {
-      expect(low[i - 1].avgMonthlyUnits).toBeGreaterThanOrEqual(low[i].avgMonthlyUnits);
+      const prev = low[i - 1], cur = low[i];
+      expect(prev.runway).toBeLessThanOrEqual(cur.runway);
+      if (prev.runway === cur.runway) {
+        expect(prev.avgMonthlyUnits).toBeGreaterThanOrEqual(cur.avgMonthlyUnits);
+      }
     }
+  });
+
+  test("the owner's example: empty shelf outranks a faster seller with stock", () => {
+    const csv = [
+      "BRAND,DESCRIP,SIZE,QTY_ON_HND,FIRST,SECON,THIRD,FOURT,",
+      "NEW AMSTERDAM,PINK WHITNEY,50ml,191,300,350,340,360,337.5",   // 191 on hand, huge seller
+      "CLASSIFIED,SAV BLANC,750ml,0,70,68,72,70,70",                  // OUT, solid seller
+    ].join("\n");
+    const r = importExport(csv, {});
+    const low = lowStock(r.products, 1);
+    expect(low[0].name).toBe("CLASSIFIED SAV BLANC");   // out now → first
+    expect(low[0].runwayDays).toBe(0);
+    expect(low[1].name).toBe("NEW AMSTERDAM PINK WHITNEY");
+    expect(low[1].runwayDays).toBeGreaterThan(10);      // ~17 days of cover
+    // Both are still fast movers — the tier doesn't change, only the order.
+    const t = lowStockTiers(r.products, 1);
+    expect(t.fast.map((p) => p.name)).toEqual(["CLASSIFIED SAV BLANC", "NEW AMSTERDAM PINK WHITNEY"]);
   });
 
   test("tiers split by velocity; slow tier holds the under-6/mo items", () => {

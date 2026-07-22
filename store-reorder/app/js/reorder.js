@@ -45,25 +45,35 @@ export function suggestedCases(p, coverMonths = DEFAULT_COVER_MONTHS) {
   return Math.ceil(s / p.packSize);
 }
 
-// Sorted by sales velocity (what sells most) so the money items lead;
-// shortage ratio breaks ties and orders manual-par items without sales data.
+// Sorted by URGENCY: runway (fraction of the target still on the shelf)
+// ascending — an empty shelf on a 70/mo wine outranks a fast seller that
+// still has weeks of stock. Velocity breaks ties, so among the empty
+// shelves the fastest seller is first.
 export function lowStock(products, coverMonths = DEFAULT_COVER_MONTHS) {
   return activeProducts(products)
     .filter((p) => {
       const par = effectivePar(p, coverMonths);
       return par != null && par > 0 && effectiveOnHand(p) < par;
     })
-    .map((p) => ({
-      ...p,
-      effParUnits: effectivePar(p, coverMonths),
-      parSource: parSource(p),
-      shortageUnits: shortageUnits(p, coverMonths),
-      suggestedCases: suggestedCases(p, coverMonths),
-      monthsActive: p.salesMonths ? p.salesMonths.filter((m) => m > 0).length : null,
-    }))
+    .map((p) => {
+      const effParUnits = effectivePar(p, coverMonths);
+      return {
+        ...p,
+        effParUnits,
+        parSource: parSource(p),
+        shortageUnits: shortageUnits(p, coverMonths),
+        suggestedCases: suggestedCases(p, coverMonths),
+        monthsActive: p.salesMonths ? p.salesMonths.filter((m) => m > 0).length : null,
+        runway: effectiveOnHand(p) / effParUnits, // 0 = out now, 1 = at target
+        runwayDays: p.avgMonthlyUnits > 0
+          ? Math.round(effectiveOnHand(p) / (p.avgMonthlyUnits / 30))
+          : null,
+      };
+    })
     .sort((a, b) =>
+      a.runway - b.runway ||
       (b.avgMonthlyUnits ?? -1) - (a.avgMonthlyUnits ?? -1) ||
-      b.shortageUnits / b.effParUnits - a.shortageUnits / a.effParUnits);
+      a.name.localeCompare(b.name));
 }
 
 // Priority tiers for the Low Stock screen. Slow movers (auto-flagged, under
@@ -82,14 +92,6 @@ export function lowStockTiers(products, coverMonths = DEFAULT_COVER_MONTHS) {
     else steady.push(p);
   }
   return { fast, steady, slow, all };
-}
-
-// Zero list stays meaningful at 8k products: only items that actually sell
-// (or that the owner set a par on) — not the intentional dead catalog.
-export function zeroStock(products) {
-  return activeProducts(products)
-    .filter((p) => p.onHandUnits <= 0 && (p.avgMonthlyUnits > 0 || p.parUnits != null))
-    .sort((a, b) => (b.avgMonthlyUnits ?? 0) - (a.avgMonthlyUnits ?? 0));
 }
 
 // Products whose on-hand is negative: the inventory record needs fixing.
