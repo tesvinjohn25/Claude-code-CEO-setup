@@ -4,6 +4,7 @@ import { toUnits, toCasesBottles, formatUnits } from "./units.js";
 import { lowStock, zeroStock, unsetPar, orderSuggestions } from "./reorder.js";
 import { sheetText, explainSuggestion } from "./ordersheet.js";
 import { exportBackup, importBackup } from "./backup.js";
+import { loadDemoData } from "./demo.js";
 
 const storage = new StorageAdapter();
 let state = storage.load();
@@ -43,8 +44,13 @@ function render() {
     view.innerHTML = `
       <div class="empty">
         <p>No products yet.</p>
-        <p>Go to <b>Data</b> and import your POS export to get started.</p>
+        <p>Go to <b>Data</b> and import your POS export to get started —
+        or try the app with sample data:</p>
+        <div class="actions">
+          <button class="action" id="load-demo">Load demo data</button>
+        </div>
       </div>`;
+    wireDemoButton();
     return;
   }
 
@@ -223,6 +229,15 @@ function renderData() {
       <div id="import-report"></div>
     </div>
 
+    <h2>Demo data</h2>
+    <div class="card">
+      <p class="sub">Load a 40-product sample inventory (with a few par levels
+      preset) to try the app. Replaces whatever is currently loaded.</p>
+      <div class="actions">
+        <button class="action secondary" id="load-demo">Load demo data</button>
+      </div>
+    </div>
+
     <h2>Backup</h2>
     <div class="card">
       <p class="sub">Everything you've entered (par levels) lives only in this
@@ -306,6 +321,35 @@ function renderData() {
   document.getElementById("store-name").addEventListener("change", (e) => {
     state.storeName = e.target.value;
     save();
+  });
+
+  wireDemoButton();
+}
+
+function wireDemoButton() {
+  const btn = document.getElementById("load-demo");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    try {
+      const { products, report } = await loadDemoData();
+      state.products = products;
+      state.lastImport = {
+        at: report.importedAt,
+        filename: report.filename,
+        imported: report.imported,
+        badRows: report.badRows,
+      };
+      if (!state.storeName) state.storeName = "Demo Store";
+      save();
+      currentTab = "low";
+      render();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Load demo data";
+      alert(`Demo load failed: ${err.message}`);
+    }
   });
 }
 

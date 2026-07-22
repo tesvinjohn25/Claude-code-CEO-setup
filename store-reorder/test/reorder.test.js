@@ -5,7 +5,7 @@ import { shortageUnits, suggestedCases, lowStock, zeroStock, orderSuggestions } 
 import { sheetText, explainSuggestion } from "../app/js/ordersheet.js";
 
 const FIXTURE = readFileSync(
-  new URL("./fixtures/fake-liquorpos-export.csv", import.meta.url),
+  new URL("../app/demo-data.csv", import.meta.url),
   "utf8",
 );
 

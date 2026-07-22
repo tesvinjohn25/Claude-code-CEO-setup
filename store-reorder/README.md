@@ -9,6 +9,7 @@ store-reorder/
 ├── app/               # the deployable static site
 │   ├── index.html
 │   ├── css/style.css
+│   ├── demo-data.csv       # synthetic POS export (bundled demo data)
 │   └── js/
 │       ├── posAdapter.js   # ← THE RELINK POINT (see below)
 │       ├── csv.js          # CSV parsing
@@ -18,11 +19,11 @@ store-reorder/
 │       ├── ordersheet.js   # WhatsApp/print text + arithmetic explanations
 │       ├── backup.js       # JSON backup/restore
 │       ├── store.js        # StorageAdapter (localStorage now, cloud in P1)
+│       ├── demo.js         # "Load demo data" button logic + preset pars
 │       └── app.js          # UI
 └── test/
-    ├── fixtures/fake-liquorpos-export.csv   # synthetic POS export
-    ├── *.test.js                            # bun test suite
-    └── mobile-check.js                      # Playwright phone-viewport E2E
+    ├── *.test.js           # bun test suite (runs against app/demo-data.csv)
+    └── mobile-check.js     # Playwright phone-viewport E2E
 ```
 
 ## Run locally
@@ -50,7 +51,7 @@ step.
 ## Relinking the real LiquorPOS export (when it arrives)
 
 The app currently runs against a **synthetic** export
-(`test/fixtures/fake-liquorpos-export.csv`). Every assumption about the POS
+(`app/demo-data.csv`). Every assumption about the POS
 file lives in **one file**: `app/js/posAdapter.js`.
 
 When you have the real export:
