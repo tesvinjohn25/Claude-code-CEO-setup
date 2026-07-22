@@ -2,8 +2,10 @@ name: Deploy store-reorder app to GitHub Pages
 
 on:
   push:
-    branches: [main]
-    paths: ["store-reorder/app/**"]
+    branches: [main, claude/multi-store-inventory-plan-82hfuu]
+    paths:
+      - "store-reorder/app/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
