@@ -84,7 +84,7 @@ await shot("4-low-stock");
 await page.click("#go-needs-par");
 const needsParCount = await page.locator("#inv-list .item").count();
 if (needsParCount !== 39) fail(`needs-par filter shows ${needsParCount}, expected 39`);
-await page.click("#clear-needs-par");
+await page.click("#clear-inv-mode");
 
 // Summary strip button jumps straight to the order sheets.
 await page.click('[data-tab="low"]');
