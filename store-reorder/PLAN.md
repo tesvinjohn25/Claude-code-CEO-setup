@@ -27,14 +27,20 @@ is a tangible working website first; everything else layers on top.
 One store, one browser, no backend. Everything runs on GitHub Pages with
 localStorage. This alone replaces the memory-walk.
 
-1. **Product list** — name, distributor, section/category, pack size, and a
-   **preferred level (par) entered manually per product** — it varies for each
-   product, so it is always editable. Quantities are tracked in **cases +
-   bottles** (e.g. par = 5 cases; on hand = 4 cases 6 bottles).
-2. **LiquorPOS CSV import** — load the real product list in one go from the
-   POS's Excel/CSV export. No typing hundreds of items.
-3. **Count screen** — fast number entry down the list, grouped by shelf
-   section. Phone-first, numeric keyboard, big touch targets.
+1. **LiquorPOS CSV import — the source of inventory.** The POS export
+   already contains everything about the products: name, distributor, pack
+   size, section/category, and **current on-hand quantities**. The importer
+   loads it all in one go — no typing hundreds of items — and re-importing a
+   fresh export at any time refreshes the on-hand numbers. The POS stays the
+   system of record for stock; this app reads it.
+2. **Manual par levels — a given of this project.** The one thing the POS
+   does not know: the **preferred level per product**, entered and edited
+   manually in the app (it varies for each product). Quantities are tracked
+   in **cases + bottles** (e.g. par = 5 cases; on hand = 4 cases 6 bottles).
+3. **Count/adjust screen** — for spot corrections between POS imports (shelf
+   doesn't match the system, breakage, etc.): fast number entry down the
+   list, grouped by shelf section. Phone-first, numeric keyboard, big touch
+   targets. Not the primary way stock gets in — the CSV import is.
 4. **Low-stock alerts with suggestions** — the home screen compares on-hand to
    par for every product. Anything under par (Johnnie Walker par 5 cases, on
    hand 4 → flagged) shows as an alert with the suggested action: "order N
@@ -47,9 +53,9 @@ localStorage. This alone replaces the memory-walk.
    the browser clears.
 7. **Deployed on GitHub Pages.**
 
-**MVP is done when:** an employee counts the shelves on a phone, the owner
-opens the site, sees what's low, and sends each distributor order in five
-minutes.
+**MVP is done when:** someone imports the week's POS export, the owner opens
+the site, sees what's low against his par levels, and sends each distributor
+order in five minutes.
 
 ### MVP tech
 - Static single-page app, simple build, GitHub Pages.
@@ -68,9 +74,9 @@ depends on.
    localStorage remains the offline working copy; last-write-wins per product.
 2. **Owner dashboard from home** — items below par, items at zero, days since
    last count per section, sorted worst-first.
-3. **Running stock** — counts set the number; deliveries and quick
-   adjustments (+/−) move it between counts. No POS sales feed yet — weekly
-   counts keep it honest.
+3. **Running stock** — regular POS export imports set the numbers; quick
+   adjustments (+/−) cover anything that happens between imports. Everyone's
+   view updates on sync.
 4. **Simple sign-in** — one shared login per store, nothing fancier.
 
 ---
@@ -130,7 +136,7 @@ Valuable, but nothing here blocks daily use. Build only after P2 is real.
 
 | Tier | What | Why this order |
 |---|---|---|
-| **P0 (MVP)** | Product list w/ manual par (cases+bottles), CSV import, count screen, low-stock alerts + order suggestion, order sheets, backup, GitHub Pages | Usable website now; replaces the memory-walk |
+| **P0 (MVP)** | POS CSV import as inventory source, manual par (cases+bottles), adjust screen, low-stock alerts + order suggestion, order sheets, backup, GitHub Pages | Usable website now; replaces the memory-walk |
 | **P1** | Supabase sync, from-home dashboard, running stock, login | "Check inventory online" — foundation for multi-store |
 | **P2** | 3-store visibility, auto partner-check on low stock, reservations w/ approve, status-driven transfers, balances | The triangle + efficient stock use across stores |
 | **P3** | Reports, AI reservation triage, seasonal placement suggestions, combined orders | Nice-to-have intelligence on top of real data |
