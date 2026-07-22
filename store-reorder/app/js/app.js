@@ -101,7 +101,7 @@ function renderLow() {
   html += low.length === 0
     ? `<div class="empty">Nothing below par. 🎉</div>`
     : low.map((p) => `
-        <div class="item">
+        <div class="item" data-barcode="${esc(p.barcode)}">
           <div style="flex:1">
             <div class="name">${esc(p.name)} <span class="sub">${esc(p.size)}</span></div>
             <div class="sub">${esc(p.distributor)} · ${esc(p.section)}</div>
@@ -165,6 +165,7 @@ function renderInventory() {
 function renderInventoryList() {
   const q = inventoryFilter.toLowerCase();
   const all = Object.values(state.products)
+    .filter((p) => p.active !== false) // delisted products stay hidden
     .filter((p) => !needsParOnly || p.parUnits == null)
     .filter((p) => !q || p.name.toLowerCase().includes(q) || p.section.toLowerCase().includes(q))
     .sort((a, b) => a.section.localeCompare(b.section) || a.name.localeCompare(b.name));
@@ -230,19 +231,21 @@ function openParEditor(barcode) {
       </div>
     </div>`;
 
+  // Clamp to whole non-negative numbers so junk input ("-3", "2.5", "abc")
+  // can never throw inside toUnits or store a nonsense par.
+  const cleanQty = (id) => Math.max(0, Math.floor(Number(document.getElementById(id).value) || 0));
+
   document.getElementById("par-save").addEventListener("click", () => {
-    const cases = Number(document.getElementById("par-cases").value) || 0;
-    const bottles = Number(document.getElementById("par-bottles").value) || 0;
-    p.parUnits = toUnits(cases, bottles, p.packSize);
+    p.parUnits = toUnits(cleanQty("par-cases"), cleanQty("par-bottles"), p.packSize);
     save();
-    renderInventory();
+    render(); // full render keeps the Low Stock tab badge in sync
   });
   document.getElementById("par-clear").addEventListener("click", () => {
     p.parUnits = null;
     save();
-    renderInventory();
+    render();
   });
-  document.getElementById("par-back").addEventListener("click", renderInventory);
+  document.getElementById("par-back").addEventListener("click", render);
 }
 
 function renderOrders() {
@@ -345,7 +348,10 @@ function renderData() {
           report.badRows.slice(0, 10).map((r) => `line ${r.line}: ${esc(r.reason)}`).join("<br>") +
           (report.badRows.length > 10 ? "<br>…" : "") + `</div>`
         : "";
-      box.innerHTML = `<div class="notice ok">Imported ${report.imported} products from ${esc(file.name)}.</div>${bad}`;
+      const gone = report.delisted
+        ? `<div class="notice warn">${report.delisted} product(s) no longer in the export — hidden from lists (pars kept in case they return).</div>`
+        : "";
+      box.innerHTML = `<div class="notice ok">Imported ${report.imported} products from ${esc(file.name)}.</div>${bad}${gone}`;
       renderDataHeaderOnly();
     };
     reader.readAsText(file);

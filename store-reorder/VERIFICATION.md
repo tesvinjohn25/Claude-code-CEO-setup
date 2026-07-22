@@ -1,7 +1,11 @@
 # P0a Verification — traceability table (plan §13.5)
 
-Run the suite: `bun test store-reorder` (28 tests).
+Run the suite: `bun test store-reorder` (32 tests).
 Phone E2E: `CHROMIUM_PATH=/opt/pw-browsers/chromium bun store-reorder/test/mobile-check.js`.
+Six-week usage simulation (imports with sales/deliveries, delist/return,
+new product, corrupted row, backup/wipe/restore, junk par input, ~1400
+independent assertions): `CHROMIUM_PATH=/opt/pw-browsers/chromium bun
+store-reorder/test/simulate-weeks.js`.
 
 | Requirement (plan §) | Implemented in | Proven by | Status |
 |---|---|---|---|
@@ -21,6 +25,7 @@ Phone E2E: `CHROMIUM_PATH=/opt/pw-browsers/chromium bun store-reorder/test/mobil
 | §3.6 Last-backup reminder shown | `app.js` Data tab | screenshot `2-import-done` (Data tab) | ✅ |
 | §3 StorageAdapter seam for P1; corrupt storage safe | `store.js` | `backup.test.js` StorageAdapter cases | ✅ |
 | §12 Usable one-handed on mid-range Android | `style.css` (52px targets, bottom tabs) | `mobile-check.js` full flow at 393×851, screenshots 1–5 | ✅ |
+| §12 Multi-cycle real use holds up (weekly re-imports, delist/return, bad rows, restore) | importer `active` flag, input clamping | `simulate-weeks.js` 6-week run, ~1400 assertions | ✅ |
 | §3 Deployed on GitHub Pages | `app/` is pure static | — | ⬜ pending: enable Pages for `store-reorder/app` |
 | §15.1 Real export columns verified | `posAdapter.js` `ACTIVE_FORMAT` | — | ⬜ **pending real file** — running on synthetic format `fake-v1`; relink steps in README |
 | §13.7 Human gate: value moment (owner approves an order sheet) | — | owner sign-off | ⬜ pending |

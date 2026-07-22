@@ -83,4 +83,40 @@ describe("POS export import (plan §3.1, §12)", () => {
     const { report } = importExport("", {});
     expect(report.ok).toBe(false);
   });
+
+  test("products missing from a new export are marked inactive", () => {
+    const first = importExport(FIXTURE, {});
+    first.products["721733000029"].parUnits = 24; // Malibu
+    const withoutMalibu = FIXTURE.split("\n").filter((l) => !l.startsWith("721733000029")).join("\n");
+    const second = importExport(withoutMalibu, first.products);
+    expect(second.report.delisted).toBe(1);
+    expect(second.products["721733000029"].active).toBe(false);
+    // Everything still present stays active.
+    expect(second.products["080432400630"].active).toBe(true);
+  });
+
+  test("a returning product is reactivated with its par intact", () => {
+    const first = importExport(FIXTURE, {});
+    first.products["721733000029"].parUnits = 24;
+    const withoutMalibu = FIXTURE.split("\n").filter((l) => !l.startsWith("721733000029")).join("\n");
+    const second = importExport(withoutMalibu, first.products);
+    const third = importExport(FIXTURE, second.products);
+    expect(third.products["721733000029"].active).toBe(true);
+    expect(third.products["721733000029"].parUnits).toBe(24);
+    expect(third.report.delisted).toBe(0);
+  });
+
+  test("a broken row does not delist its product", () => {
+    const first = importExport(FIXTURE, {});
+    const corrupted = FIXTURE.replace(
+      "721733000029,Malibu Coconut,750ml,12,Rum,RNDC,18",
+      "721733000029,Malibu Coconut,750ml,BAD,Rum,RNDC,18",
+    );
+    const second = importExport(corrupted, first.products);
+    expect(second.report.badRows.length).toBe(1);
+    expect(second.report.delisted).toBe(0);
+    // Keeps last known good data, still active.
+    expect(second.products["721733000029"].active).toBe(true);
+    expect(second.products["721733000029"].onHandUnits).toBe(18);
+  });
 });
