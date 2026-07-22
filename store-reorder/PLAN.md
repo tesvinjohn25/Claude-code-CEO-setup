@@ -308,7 +308,62 @@ status; every pickup/delivery generates its pending-POS-entry prompts.
 
 ---
 
-## 13. Risks and mitigations
+## 13. Codex self-verification protocol
+
+No phase is declared complete on Codex's say-so. Every claim of "done" must be
+backed by evidence produced the same way, every time:
+
+1. **Every scenario in §12 becomes an automated test before the phase ends.**
+   The testing scenarios are not suggestions — they are the acceptance suite.
+   A phase with an untested §12 scenario is an unfinished phase. Tests run
+   with one command (`npm test` / `bun test`) and in CI on every push, so
+   regressions in earlier phases surface immediately.
+
+2. **Fixture-first development.** Task one of P0a (§15 step 1) produces a real
+   anonymized LiquorPOS export checked into the repo as a fixture. All
+   importer and calculation tests run against that file — not hand-invented
+   data — so the tests exercise the real column names, encodings and quirks.
+
+3. **Golden-master order sheets.** Once the owner confirms one generated order
+   sheet is right ("that's what I would have ordered"), that input → output
+   pair is frozen as a regression test. Future changes that alter the output
+   of a locked golden master must justify the diff, not silently change it.
+
+4. **Property checks on the arithmetic.** The deterministic core (§10, §4.4
+   conversions) gets invariant tests, not just examples: cases+bottles →
+   base units → cases+bottles always round-trips; suggested orders are never
+   negative and always whole packs; a transfer suggestion never exceeds
+   transferable quantity; re-importing the same file twice changes nothing.
+
+5. **A traceability table per phase, kept in the repo**
+   (`store-reorder/VERIFICATION.md`). One row per numbered requirement in the
+   phase's scope section:
+
+   | Requirement (plan §) | Implemented in | Proven by (test/command) | Status |
+
+   Codex fills every row with a pointer to real evidence — a named test, a
+   command and its output, a screenshot. A row that says "done" with no
+   evidence pointer is treated as not done. This table is the self-check:
+   producing it forces Codex to re-read the plan section against the code.
+
+6. **Phone-reality check.** UI acceptance runs in a mobile viewport via
+   headless browser (Playwright) covering the core flow — import → set par →
+   low-stock list → order sheet — with screenshots attached to the
+   verification table so a human can eyeball what a phone user actually sees.
+
+7. **The human gates stay human.** Two checks can never be self-certified and
+   are listed as explicit owner sign-offs in the table: (a) the P0a value
+   moment — the owner compares a generated sheet to what he would have
+   ordered; (b) each phase's real-world cycle requirement (e.g. P0a run
+   through a real weekly reorder) before the next phase starts.
+
+**Definition of done for any phase:** all §12 scenarios for the phase are
+green in CI + the traceability table is complete with evidence + the human
+gates are signed off. All three, or the phase is still open.
+
+---
+
+## 14. Risks and mitigations
 
 - **Export quality** — verify real files week one (§2); the importer validates
   and reports bad rows instead of silently skipping.
@@ -329,7 +384,7 @@ status; every pickup/delivery generates its pending-POS-entry prompts.
 
 ---
 
-## 14. Build order
+## 15. Build order
 
 1. Verify the real export columns (Store A) and document them.
 2. Build P0a against real files; test on the target phone.
@@ -344,7 +399,7 @@ status; every pickup/delivery generates its pending-POS-entry prompts.
 
 ---
 
-## 15. Out of scope (all phases as planned)
+## 16. Out of scope (all phases as planned)
 
 POS write-back by the script (workaround investigated separately); payment
 processing; true live POS feeds (until the export cadence proves itself);
