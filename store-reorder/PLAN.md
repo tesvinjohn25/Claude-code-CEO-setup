@@ -11,137 +11,184 @@ Today the knowledge of what to reorder lives entirely in the owner's head. Every
 week he walks the shelves and builds each distributor's order from memory. That
 is the mechanism behind "the store won't run without me."
 
-This tool replaces memory with data, in three steps:
+The end state: a live inventory system shared by three stores that already
+borrow stock from each other. Each store sees its own stock against preferred
+levels, gets alerted when something runs low, checks the partner stores before
+spending money at a distributor, reserves stock from partners with an
+approve/pickup/deliver flow, and gets reports on everything that moved.
 
-1. **Reorder tool (V1)** — an employee counts the shelves, the app drafts one
-   clean order per distributor, the owner reviews in five minutes.
-2. **Live inventory (V2)** — the inventory is always up to date and stored in
-   the cloud, so the owner can open the app from anywhere and see current stock
-   and what's running low — without being in the store.
-3. **Three-store network (V3)** — the three stores already borrow stock from
-   each other informally. Bring all three onto the same system so each store
-   can see the other two stores' inventory, log transfers between stores, and
-   use stock **efficiently across the triangle**: before ordering from a
-   distributor, check whether a partner store has surplus.
+**But we ship in priority order.** The MVP below is deliberately small so there
+is a tangible working website first; everything else layers on top.
 
 ---
 
-## 2. Phase V1 — Single-store reorder tool (must have, day 2 deadline)
+## 2. MVP — the tangible website to use now (P0)
 
-Order quantity = **par level − counted, rounded up to pack size**.
+One store, one browser, no backend. Everything runs on GitHub Pages with
+localStorage. This alone replaces the memory-walk.
 
-1. **Product list**: name, distributor, pack size, par level, shelf
-   section/category. Add, edit, delete. Saved in the browser (localStorage).
-2. **LiquorPOS import**: the POS exports its item list to Excel. Build an
-   importer that reads that file (saved as CSV) and loads the real product list
-   in one go — no typing hundreds of items. Ask the owner to email the export
-   before starting.
-3. **Count screen**: fast number entry down the list, grouped by shelf section
-   or category. Big touch targets, numeric keyboard, phone-first.
-4. **Order sheets**: one per distributor, ready to print or copy straight into
-   WhatsApp.
-5. **Backup**: export and import all data as a single JSON file, so nothing is
-   ever lost if the browser clears.
-6. **Wow feature**: photograph the handwritten count sheet, upload the photo to
-   ChatGPT, ask it for JSON in the app's format, paste the result into the
-   app's import box. (App side: a paste-JSON import box with validation and a
-   copyable prompt template.)
-7. **Deployed on GitHub Pages.**
+1. **Product list** — name, distributor, section/category, pack size, and a
+   **preferred level (par) entered manually per product** — it varies for each
+   product, so it is always editable. Quantities are tracked in **cases +
+   bottles** (e.g. par = 5 cases; on hand = 4 cases 6 bottles).
+2. **LiquorPOS CSV import** — load the real product list in one go from the
+   POS's Excel/CSV export. No typing hundreds of items.
+3. **Count screen** — fast number entry down the list, grouped by shelf
+   section. Phone-first, numeric keyboard, big touch targets.
+4. **Low-stock alerts with suggestions** — the home screen compares on-hand to
+   par for every product. Anything under par (Johnnie Walker par 5 cases, on
+   hand 4 → flagged) shows as an alert with the suggested action: "order N
+   from distributor X" (order qty = par − on hand, rounded up to pack size).
+   In the MVP the suggestion is always a distributor order; checking partner
+   stores comes in P2.
+5. **Order sheets** — one per distributor, generated from the low-stock list,
+   ready to print or paste into WhatsApp.
+6. **Backup** — export/import all data as one JSON file so nothing is lost if
+   the browser clears.
+7. **Photo count import (wow feature)** — photograph the handwritten count
+   sheet, ask ChatGPT for JSON in the app's format, paste it into the app's
+   import box (with validation + a copyable prompt template).
+8. **Deployed on GitHub Pages.**
 
-### V1 tech
-- Static single-page app (plain HTML/JS or a small framework — keep the build
-  simple enough for GitHub Pages).
-- All state in localStorage behind a small storage module (`StorageAdapter`)
-  — this abstraction is what lets V2 swap in cloud sync without a rewrite.
+**MVP is done when:** an employee counts the shelves on a phone, the owner
+opens the site, sees what's low, and sends each distributor order in five
+minutes.
 
----
-
-## 3. Phase V2 — Live online inventory
-
-**Goal:** the owner can check inventory from anywhere, any time, and instantly
-see what's low — the app is no longer a weekly counting tool but a live view of
-the store.
-
-1. **Cloud sync backend.** GitHub Pages is static, so add a free-tier hosted
-   database (Supabase or Firebase — pick one; Supabase preferred for plain
-   Postgres + row-level security). The static app stays on GitHub Pages and
-   talks to the backend directly.
-2. **Offline-first.** localStorage remains the working copy; sync to the cloud
-   when online. Last-write-wins per product is acceptable at this scale.
-3. **Running stock level.** Track `on_hand` per product, updated by:
-   - shelf counts (a count sets the number),
-   - deliveries received (+),
-   - optional quick adjustments (breakage, samples, corrections).
-   Full POS sales integration is out of scope for now; weekly counts keep the
-   numbers honest.
-4. **Low-stock dashboard.** A home screen showing: items below par, items at
-   zero, and "days since last count" per section — sorted worst-first. This is
-   the page the owner opens on his phone from home.
-5. **Simple sign-in.** One shared login per store is enough (email + password
-   or magic link). No user management UI.
+### MVP tech
+- Static single-page app, simple build, GitHub Pages.
+- All state behind a small `StorageAdapter` module over localStorage — this is
+  the seam that lets P1 swap in cloud sync without a rewrite.
 
 ---
 
-## 4. Phase V3 — The three-store triangle
+## 3. P1 — Live online inventory (first add-on)
 
-**Goal:** the three stores run on the same system, see each other's inventory,
-log the borrowing that already happens informally, and use stock efficiently
-across all three before spending money at distributors.
+Makes the inventory checkable from anywhere, which everything multi-store
+depends on.
 
-1. **Multi-store data model.** Every product row belongs to a `store_id`.
-   Products are matched across stores by name/barcode so "Jameson 750ml at
-   Store A" and the same item at Store B are recognized as the same product.
-2. **Cross-store visibility.** From any store's app, look up an item and see
-   on-hand at all three stores. A store's staff can see partner inventory but
-   only edit their own.
-3. **Transfer log.** When Store A takes 2 cases from Store B:
-   - record a transfer (item, qty, from-store, to-store, date, who),
-   - Store B's on-hand goes down, Store A's goes up — automatically,
-   - a running balance page shows what each store owes the others, so the
-     informal borrowing stays fair and visible.
-4. **Efficient reordering across the triangle.** When the reorder sheet is
-   generated at Store A:
-   - for each item below par, first check whether Store B or C is **above**
-     par (surplus),
-   - if yes, suggest a transfer instead of (or before) a distributor order,
-   - the distributor order sheet then covers only what the network as a whole
-     actually needs.
-5. **Combined orders (nice to have).** Optionally merge the three stores'
-   distributor orders into one to hit case minimums / free-delivery thresholds,
-   with a per-store split sheet for delivery day.
+1. **Cloud sync backend** — free tier Supabase (plain Postgres + row-level
+   security). Static app stays on GitHub Pages, talks to Supabase directly.
+   localStorage remains the offline working copy; last-write-wins per product.
+2. **Owner dashboard from home** — items below par, items at zero, days since
+   last count per section, sorted worst-first.
+3. **Running stock** — counts set the number; deliveries and quick
+   adjustments (+/−) move it between counts. No POS sales feed yet — weekly
+   counts keep it honest.
+4. **Simple sign-in** — one shared login per store, nothing fancier.
 
 ---
 
-## 5. Data model (target shape, V3)
+## 4. P2 — The three-store triangle
+
+The partner stores join. This is where the low-stock suggestion gets smart and
+the informal borrowing becomes a real workflow.
+
+1. **Multi-store model + visibility** — every product row belongs to a store;
+   same products matched across stores by name/barcode. Any store can look up
+   an item and see on-hand at all three; each store edits only its own.
+2. **Partner-first low-stock suggestions (automated)** — when an item falls
+   below par, the app automatically checks the other two stores:
+   - a partner is **above par** on it → suggest "request N from Store B",
+   - no partner surplus → the item goes to the distributor order list.
+   This runs deterministically on every sync — no AI needed (see §7).
+3. **Reservation requests** — from a low-stock suggestion (or manually), send
+   a request to a partner store to **reserve** N cases/bottles for later
+   pickup. The receiving store sees the request and taps approve or decline.
+   Approved stock shows as "reserved" in their inventory so it isn't sold out
+   from under the deal.
+4. **Transfer status tracking (Uber-Eats style)** — every approved request
+   moves through statuses: **requested → approved → reserved → picked up →
+   delivered**, shown as a progress bar both stores can see. Inventory updates
+   are driven by the status automatically:
+   - *picked up* → deducted from the giving store,
+   - *delivered* → added to the receiving store.
+   No manual re-entry of transferred stock — this closes the "how do we input
+   what we took from Store B" gap.
+5. **Transfer balances** — a running page of what each store owes the others,
+   so the borrowing stays fair and visible.
+
+---
+
+## 5. P3 — Reports & intelligence (save for later)
+
+Valuable, but nothing here blocks daily use. Build only after P2 is real.
+
+1. **Activity report** — everything in one place per week/month/season: what
+   went low, what was ordered from distributors, what was taken from / given
+   to partner stores, per product and per store. Exportable.
+2. **AI-assisted reservation triage** — when a reservation request comes in,
+   an LLM looks at the receiving store's own stock, par, and recent movement
+   for that product and drafts a recommendation ("you're at 9 cases against a
+   par of 5 and it barely moves — approving 2 cases is safe"). **The owner
+   always makes the final call**; the AI only suggests.
+3. **Seasonal product-placement suggestions** — after the store layout is
+   given to the app, use the seasonal report data to suggest placement
+   changes. Most speculative feature; last in line.
+4. **Combined distributor orders** — merge the three stores' orders to hit
+   case minimums / free-delivery thresholds, with a per-store split sheet.
+
+---
+
+## 6. Priority summary
+
+| Tier | What | Why this order |
+|---|---|---|
+| **P0 (MVP)** | Product list w/ manual par (cases+bottles), CSV import, count screen, low-stock alerts + order suggestion, order sheets, backup, photo import, GitHub Pages | Usable website now; replaces the memory-walk |
+| **P1** | Supabase sync, from-home dashboard, running stock, login | "Check inventory online" — foundation for multi-store |
+| **P2** | 3-store visibility, auto partner-check on low stock, reservations w/ approve, status-driven transfers, balances | The triangle + efficient stock use across stores |
+| **P3** | Reports, AI reservation triage, seasonal placement suggestions, combined orders | Nice-to-have intelligence on top of real data |
+
+---
+
+## 7. Redistribution: deterministic vs LLM
+
+**Decision: do the core redistribution deterministically. Add the LLM only as
+an optional advisory layer in P3.**
+
+- The actual decision — "who is below par, who is above par, how many cases
+  can move" — is arithmetic over data we already have (on-hand, par, pack
+  size, transfer cost/effort). Simple rules cover it: never take a store below
+  its own par; move stock only when surplus ≥ requested; prefer the nearer /
+  owing store. Deterministic rules are free, instant, offline-capable,
+  explainable, and never hallucinate a number.
+- An LLM API adds per-call cost, latency, an API key to manage, and
+  non-reproducible answers — a bad trade for the core loop.
+- Where an LLM **is** worth it: judgment calls with fuzzy context — the P3
+  reservation triage ("is giving away 2 cases wise given the season?") and
+  placement suggestions. There it drafts advice; the owner decides.
+
+---
+
+## 8. Data model (target shape at P2)
 
 - `stores` — id, name.
-- `products` — id, store_id, name, barcode?, distributor, pack_size,
-  par_level, section, on_hand, last_counted_at.
-- `counts` — id, store_id, product_id, counted_qty, counted_at, counted_by.
-- `transfers` — id, product_ref, qty, from_store_id, to_store_id, date, note.
+- `products` — id, store_id, name, barcode?, distributor, pack_size
+  (bottles/case), par_cases, par_bottles, on_hand_cases, on_hand_bottles,
+  section, last_counted_at.
+- `counts` — id, store_id, product_id, counted_cases, counted_bottles,
+  counted_at, counted_by.
+- `reservations` — id, product_ref, qty_cases, qty_bottles, from_store_id,
+  to_store_id, status (requested/approved/declined/reserved/picked_up/
+  delivered/cancelled), requested_at, status_history[].
 - `orders` — id, store_id, distributor, created_at, lines[{product_id, qty}],
   status (draft/sent/received).
 
-V1 stores `products` + `counts` in localStorage; V2 moves them to the backend;
-V3 adds `stores` + `transfers` and store scoping.
+MVP keeps `products` + `counts` in localStorage; P1 moves them to Supabase;
+P2 adds `stores` + `reservations` and store scoping.
 
 ---
 
-## 6. Build order & milestones
+## 9. Principles for Codex
 
-| Milestone | Contents | Done when |
-|---|---|---|
-| M1 (day 1–2) | V1 features 1–7 | Owner drafts a real weekly order from an employee's count, live on GitHub Pages |
-| M2 | Cloud sync + low-stock dashboard | Owner checks stock from home on his phone |
-| M3 | Second + third store onboarded, cross-store visibility | Any store can look up an item across all three |
-| M4 | Transfer log + balances | A real borrow is logged and both stores' numbers update |
-| M5 | Transfer-first reorder suggestions | A weekly order sheet includes "take from Store B" lines |
-
-## 7. Principles for Codex
-
-- Phone-first: everything must work one-handed on a mid-range Android.
-- Never lose data: backup/export works in every phase; sync failures fall back
-  to localStorage silently.
-- Keep V1 shippable on its own — V2/V3 must not delay the day-2 deadline.
+- Ship P0 completely before touching P1 — a small working site beats a big
+  half-built one.
+- Phone-first: everything works one-handed on a mid-range Android.
+- Never lose data: backup/export works in every phase; sync failures fall
+  back to localStorage silently.
+- Par levels and inventory are always manually editable — the owner's
+  judgment overrides the system everywhere.
+- Inventory changes should be driven by workflow events (count entered,
+  delivery received, transfer status changed), never by duplicate manual
+  entry.
 - No accounts/permissions complexity: one login per store, trust between the
   three owners.
