@@ -1,197 +1,352 @@
-# Store Reorder & Multi-Store Inventory Tool — Plan for Codex
+# Store Reorder & Multi-Store Inventory Tool — MVP Plan for Codex
 
-**Builder:** Codex. **Client:** the store owner (Dad) + 2 partner stores.
-**Deliverable:** a phone-friendly web app, live on GitHub Pages.
+**Builder:** Codex.
+**Primary users:** the owner of Store A; later the owners/operators of partner Stores B and C.
+**Delivery:** a phone-friendly web app on GitHub Pages, growing into three private
+store workspaces connected by a shared coordination layer.
 
----
-
-## 1. Vision
-
-Today the knowledge of what to reorder lives entirely in the owner's head. Every
-week he walks the shelves and builds each distributor's order from memory. That
-is the mechanism behind "the store won't run without me."
-
-The end state: a live inventory system shared by three stores that already
-borrow stock from each other. Each store sees its own stock against preferred
-levels, gets alerted when something runs low, checks the partner stores before
-spending money at a distributor, reserves stock from partners with an
-approve/pickup/deliver flow, and gets reports on everything that moved.
-
-**But we ship in priority order.** The MVP below is deliberately small so there
-is a tangible working website first; everything else layers on top.
+**MVP definition (the bar every phase is measured against):** the shortest path
+to a working product whose value is felt immediately. Anything not on that path
+ships in a later phase, not the current one.
 
 ---
 
-## 2. MVP — the tangible website to use now (P0)
+## 1. Executive summary
 
-One store, one browser, no backend. Everything runs on GitHub Pages with
-localStorage. This alone replaces the memory-walk.
+Replace memory-based reordering with a simple inventory and reorder tool, then
+grow into a coordinated three-store stock-sharing system.
 
-1. **LiquorPOS CSV import — the source of inventory.** The POS export
-   already contains everything about the products: name, distributor, pack
-   size, section/category, and **current on-hand quantities**. The importer
-   loads it all in one go — no typing hundreds of items — and re-importing a
-   fresh export at any time refreshes the on-hand numbers. The POS stays the
-   system of record for stock; this app reads it.
-2. **Manual par levels — a given of this project.** The one thing the POS
-   does not know: the **preferred level per product**, entered and edited
-   manually in the app (it varies for each product). Quantities are tracked
-   in **cases + bottles** (e.g. par = 5 cases; on hand = 4 cases 6 bottles).
-3. **Count/adjust screen** — for spot corrections between POS imports (shelf
-   doesn't match the system, breakage, etc.): fast number entry down the
-   list, grouped by shelf section. Phone-first, numeric keyboard, big touch
-   targets. Not the primary way stock gets in — the CSV import is.
-4. **Low-stock alerts with suggestions** — the home screen compares on-hand to
-   par for every product. Anything under par (Johnnie Walker par 5 cases, on
-   hand 4 → flagged) shows as an alert with the suggested action: "order N
-   from distributor X" (order qty = par − on hand, rounded up to pack size).
-   In the MVP the suggestion is always a distributor order; checking partner
-   stores comes in P2.
-5. **Order sheets** — one per distributor, generated from the low-stock list,
-   ready to print or paste into WhatsApp.
-6. **Backup** — export/import all data as one JSON file so nothing is lost if
-   the browser clears.
-7. **Deployed on GitHub Pages.**
+Two functional layers:
 
-**MVP is done when:** someone imports the week's POS export, the owner opens
-the site, sees what's low against his par levels, and sends each distributor
-order in five minutes.
+1. **Private store workspaces.** Each store has its own inventory, par levels,
+   distributors, sections, adjustments and orders. One store never edits
+   another store's private records.
+2. **Shared coordination layer.** The stores expose only what cooperation
+   needs — transferable availability, requests, reservations, transfer status,
+   direct-payment settlement records.
 
-### MVP tech
-- Static single-page app, simple build, GitHub Pages.
-- All state behind a small `StorageAdapter` module over localStorage — this is
-  the seam that lets P1 swap in cloud sync without a rewrite.
+**Confirmed decisions:**
+
+- All reorder and redistribution logic is **deterministic arithmetic**. No LLM
+  in the core loop. AI appears only later, as optional advice a human can
+  override.
+- The LiquorPOS connector is a **store-side script that exports only**. It
+  automates the POS's own Excel/CSV export and uploads it. It never writes to
+  the POS. A workaround for getting app-recorded movements back into the POS
+  will be investigated separately and is out of scope for every phase below;
+  until then the app *prompts* the exact manual POS adjustment and a person
+  enters it at the register.
+- Inter-store transfers are settled by **direct payment between stores**; the
+  app records amount and payment status, it never moves money and keeps no
+  favour balance.
+- Quantities display as **cases + bottles** but all storage and math use the
+  smallest unit (bottles), with the pack size recorded per calculation.
 
 ---
 
-## 3. P1 — Live online inventory (first add-on)
+## 2. Assumptions to verify (week-one tasks, not decrees)
 
-Makes the inventory checkable from anywhere, which everything multi-store
-depends on.
+These are *probably* true but are cheap to check and expensive to be wrong
+about. Verify them on real data before any phase that depends on them.
 
-1. **Cloud sync backend** — free tier Supabase (plain Postgres + row-level
-   security). Static app stays on GitHub Pages, talks to Supabase directly.
-   localStorage remains the offline working copy; last-write-wins per product.
-2. **Owner dashboard from home** — items below par, items at zero, days since
-   last count per section, sorted worst-first.
-3. **Running stock** — regular POS export imports set the numbers; quick
-   adjustments (+/−) cover anything that happens between imports. Everyone's
-   view updates on sync.
-4. **Simple sign-in** — one shared login per store, nothing fancier.
-
----
-
-## 4. P2 — The three-store triangle
-
-The partner stores join. This is where the low-stock suggestion gets smart and
-the informal borrowing becomes a real workflow.
-
-1. **Multi-store model + visibility** — every product row belongs to a store;
-   same products matched across stores by name/barcode. Any store can look up
-   an item and see on-hand at all three; each store edits only its own.
-2. **Partner-first low-stock suggestions (automated)** — when an item falls
-   below par, the app automatically checks the other two stores:
-   - a partner is **above par** on it → suggest "request N from Store B",
-   - no partner surplus → the item goes to the distributor order list.
-   This runs deterministically on every sync — no AI needed (see §7).
-3. **Reservation requests** — from a low-stock suggestion (or manually), send
-   a request to a partner store to **reserve** N cases/bottles for later
-   pickup. The receiving store sees the request and taps approve or decline.
-   Approved stock shows as "reserved" in their inventory so it isn't sold out
-   from under the deal.
-4. **Transfer status tracking (Uber-Eats style)** — every approved request
-   moves through statuses: **requested → approved → reserved → picked up →
-   delivered**, shown as a progress bar both stores can see. Inventory updates
-   are driven by the status automatically:
-   - *picked up* → deducted from the giving store,
-   - *delivered* → added to the receiving store.
-   No manual re-entry of transferred stock — this closes the "how do we input
-   what we took from Store B" gap.
-5. **Transfer balances** — a running page of what each store owes the others,
-   so the borrowing stays fair and visible.
-
----
-
-## 5. P3 — Reports & intelligence (save for later)
-
-Valuable, but nothing here blocks daily use. Build only after P2 is real.
-
-1. **Activity report** — everything in one place per week/month/season: what
-   went low, what was ordered from distributors, what was taken from / given
-   to partner stores, per product and per store. Exportable.
-2. **AI-assisted reservation triage** — when a reservation request comes in,
-   an LLM looks at the receiving store's own stock, par, and recent movement
-   for that product and drafts a recommendation ("you're at 9 cases against a
-   par of 5 and it barely moves — approving 2 cases is safe"). **The owner
-   always makes the final call**; the AI only suggests.
-3. **Seasonal product-placement suggestions** — after the store layout is
-   given to the app, use the seasonal report data to suggest placement
-   changes. Most speculative feature; last in line.
-4. **Combined distributor orders** — merge the three stores' orders to hit
-   case minimums / free-delivery thresholds, with a per-store split sheet.
-
----
-
-## 6. Priority summary
-
-| Tier | What | Why this order |
+| Assumption | Verify by | Needed before |
 |---|---|---|
-| **P0 (MVP)** | POS CSV import as inventory source, manual par (cases+bottles), adjust screen, low-stock alerts + order suggestion, order sheets, backup, GitHub Pages | Usable website now; replaces the memory-walk |
-| **P1** | Supabase sync, from-home dashboard, running stock, login | "Check inventory online" — foundation for multi-store |
-| **P2** | 3-store visibility, auto partner-check on low stock, reservations w/ approve, status-driven transfers, balances | The triangle + efficient stock use across stores |
-| **P3** | Reports, AI reservation triage, seasonal placement suggestions, combined orders | Nice-to-have intelligence on top of real data |
+| The LiquorPOS export reliably contains barcode, name, size, pack size, distributor, section, on-hand | Inspect a real export from Store A; document the exact columns | P0a (first build task) |
+| Barcodes are consistent across the three stores for the same product | Get one export from each store, diff barcodes for ~20 common products | P2 design freeze |
+| Weekly export cadence is acceptable until the script automates it | Run P0a through 2–3 real weekly cycles | P1 |
+
+If cross-store barcodes turn out messy, P2 adds a small product-matching/alias
+step; discovering that now costs an afternoon, discovering it in P2 costs a
+redesign.
 
 ---
 
-## 7. Redistribution: deterministic vs LLM
+## 3. P0a — the MVP kernel (build this first, ship in days)
 
-**Decision: do the core redistribution deterministically. Add the LLM only as
-an optional advisory layer in P3.**
+One store, one browser, no backend, no accounts. localStorage behind a
+`StorageAdapter` module (the seam for P1's cloud swap). Deployed on GitHub
+Pages.
 
-- The actual decision — "who is below par, who is above par, how many cases
-  can move" — is arithmetic over data we already have (on-hand, par, pack
-  size, transfer cost/effort). Simple rules cover it: never take a store below
-  its own par; move stock only when surplus ≥ requested; prefer the nearer /
-  owing store. Deterministic rules are free, instant, offline-capable,
-  explainable, and never hallucinate a number.
-- An LLM API adds per-call cost, latency, an API key to manage, and
-  non-reproducible answers — a bad trade for the core loop.
-- Where an LLM **is** worth it: judgment calls with fuzzy context — the P3
-  reservation triage ("is giving away 2 cases wise given the season?") and
-  placement suggestions. There it drafts advice; the owner decides.
+**The value moment:** the owner looks at a generated order sheet and says
+"that's basically what I would have ordered."
 
----
+1. **LiquorPOS import — the source of inventory.** Read the POS CSV/Excel
+   export: barcode (product key), name, size, pack size, distributor, section,
+   on-hand quantity. Re-importing a fresh export refreshes on-hand numbers.
+   **Par levels always survive re-imports.** Show import time and source
+   filename; the UI says "inventory as of \<timestamp\>", never "live".
+2. **Manual par levels — the app's own given.** The one thing the POS doesn't
+   know. Entered and edited per product in cases + bottles, converted to base
+   units internally, always overridable.
+3. **Low-stock list.** Available stock vs. par for every product; zero-stock
+   items shown separately; last-refresh time visible.
+4. **Distributor order suggestions.** Grouped by distributor;
+   `suggested = (par − on hand)` rounded **up** to the next valid pack.
+5. **Order sheets.** Printable, plus clean text for WhatsApp/email.
+6. **Backup.** Export/import all app-created data (pars, adjustments) as one
+   JSON file; show last-backup date as a reminder. Original POS export files
+   are retained separately by the store.
 
-## 8. Data model (target shape at P2)
+**P0a is done when:** someone imports a real weekly export, pars are set, the
+owner reviews the low-stock list and sends every distributor order in about
+five minutes — and a backup restore round-trips correctly.
 
-- `stores` — id, name.
-- `products` — id, store_id, name, barcode?, distributor, pack_size
-  (bottles/case), par_cases, par_bottles, on_hand_cases, on_hand_bottles,
-  section, last_counted_at.
-- `counts` — id, store_id, product_id, counted_cases, counted_bottles,
-  counted_at, counted_by.
-- `reservations` — id, product_ref, qty_cases, qty_bottles, from_store_id,
-  to_store_id, status (requested/approved/declined/reserved/picked_up/
-  delivered/cancelled), requested_at, status_history[].
-- `orders` — id, store_id, distributor, created_at, lines[{product_id, qty}],
-  status (draft/sent/received).
-
-MVP keeps `products` + `counts` in localStorage; P1 moves them to Supabase;
-P2 adds `stores` + `reservations` and store scoping.
+**Accepted P0a limitations** (conscious trades for speed): single browser, no
+cloud, weekly snapshot freshness, no order tracking, no multi-store, manual
+backup only.
 
 ---
 
-## 9. Principles for Codex
+## 4. P0b — first fast-follow (after 1+ real weekly cycle on P0a)
 
-- Ship P0 completely before touching P1 — a small working site beats a big
-  half-built one.
-- Phone-first: everything works one-handed on a mid-range Android.
-- Never lose data: backup/export works in every phase; sync failures fall
-  back to localStorage silently.
-- Par levels and inventory are always manually editable — the owner's
-  judgment overrides the system everywhere.
-- Inventory changes should be driven by workflow events (count entered,
-  delivery received, transfer status changed), never by duplicate manual
-  entry.
-- No accounts/permissions complexity: one login per store, trust between the
-  three owners.
+Feedback from real use decides the order of these; do not build them before
+P0a has been used for at least one real reorder.
+
+1. **Minimal order lifecycle.** Draft → sent → received/cancelled. Sent-but-
+   unreceived quantities count as inbound stock so nothing is suggested twice:
+
+   ```text
+   net requirement = par − on hand − open distributor orders − confirmed inbound
+   suggested order = positive net requirement rounded up to a valid pack
+   ```
+
+   Preserve a snapshot of each sent order even if inventory later changes.
+2. **Count/adjust screen.** Fast phone-friendly entry grouped by shelf
+   section, for spot corrections between imports (breakage, shelf ≠ system).
+   Clearly labelled +/− adjustments with reason and time.
+3. **Calculation transparency.** Every suggestion can show its arithmetic in
+   plain language so the owner can trust and override it.
+
+---
+
+## 5. P1 — Cloud-backed private workspaces
+
+Checkable from home; the foundation for multi-store.
+
+1. **Backend:** Supabase (Postgres) free tier; GitHub Pages frontend stays.
+   Row-level security separates stores from day one — enforced by the
+   database, not hidden by the UI.
+2. **Auth:** one shared login per store (matches the trust model). Individual
+   staff accounts are a future improvement, not a requirement.
+3. **Owner dashboard:** below-par, zero-stock, stale sections, open orders,
+   last import time, last successful sync.
+4. **Event-based history:** imports, adjustments, orders and receipts recorded
+   as events with a current snapshot for fast display. No whole-product
+   last-write-wins overwrites.
+5. **Offline working copy:** local copy for connectivity loss; queued changes;
+   visible sync state (synced / offline / waiting / needs attention). A failed
+   sync is never silent.
+
+---
+
+## 6. P1.5 — Store-side export script (read-only POS bridge)
+
+**Decision locked: this script exports only. It never writes to LiquorPOS.**
+
+A small script on each store's Windows POS machine, run by Task Scheduler:
+
+1. Runs the LiquorPOS item export (or reads its local data files read-only).
+2. Uploads the export to the backend over **outbound HTTPS only** — no open
+   ports, no inbound access, credentials never leave the machine.
+3. Reports every run (success/failure, row count, timestamp) so a store whose
+   script has died shows as **stale** on the dashboard instead of silently
+   drifting.
+4. Is simple enough to reinstall in five minutes; survives reboots.
+
+Effect: the weekly manual export becomes nightly (or hourly) and hands-free —
+most of the value of "live inventory" at near-zero risk. The UI still says
+"inventory as of \<timestamp\>" until freshness is proven in practice.
+
+**POS write-back is explicitly out of scope.** App-recorded movements that the
+POS should know about (transfer pickups/deliveries, adjustments) appear as a
+**pending POS entries list** — the app shows the exact adjustment to key into
+LiquorPOS at the register, and a person marks it entered. A future workaround
+for automating this will be evaluated separately; nothing below depends on it.
+
+---
+
+## 7. P2 — Three-store coordination and transfers
+
+Connect the three private workspaces through the shared layer. **No POS
+writing anywhere in this phase** — transfers update app inventories, and the
+pending-POS-entries list (§6) covers the register side.
+
+1. **Shared product catalogue.** Barcode as the shared key; shared name, size,
+   pack size stored once. Distributor, par, section, inventory stay
+   store-private. (Add an alias/matching step if the week-one barcode check
+   found mismatches.)
+2. **Controlled availability sharing.** A store below par can see partner
+   *transferable* quantity and its freshness — nothing else. No store edits
+   another's inventory. Costs, margins, sales history are never shared.
+3. **Partner-first suggestions (deterministic).**
+
+   ```text
+   transferable = on hand − reserved outbound − partner's own par − safety buffer
+   ```
+
+   Below-par item → check both partners for surplus → suggest "request N from
+   Store B", else fall back to the distributor order list. Always a
+   suggestion, never an automatic transfer. Stale partner data (older than an
+   agreed threshold) blocks the automatic suggestion.
+4. **Reservation requests.** Request products/quantities from a partner; the
+   giving store approves all, part, or declines. Approval reserves the stock
+   atomically (a database transaction — two requests can never reserve the
+   same units). Reservations can expire or be cancelled under defined rules.
+5. **Transfer status workflow.**
+
+   ```text
+   requested → approved/reserved → picked up → delivered
+            ↘ declined           ↘ cancelled
+   ```
+
+   Partial approval/pickup/delivery supported; every transition records who
+   and when, and is repeat-safe. Mistakes are corrected by reversal events,
+   never by deleting history.
+6. **Inventory effects.** Approval reduces the giver's available-to-promise
+   (not physical stock). Pickup deducts actual quantity from the giver;
+   delivery adds actual quantity to the receiver; in-transit stays visible
+   between the two. Both private events and the shared transfer share one
+   transfer ID. Each pickup/delivery also creates its pending-POS-entry
+   prompts for both stores.
+7. **Direct payment settlement.** Agreed amount, currency, payer, payee,
+   status (unpaid/paid/disputed), optional reference. Money moves outside the
+   app.
+
+**P2 is a major phase, not an add-on.** Pilot it with a limited product set
+before enabling the full catalogue.
+
+---
+
+## 8. P3 — Reporting and optional intelligence
+
+Only after the workflows above are demonstrably reliable.
+
+1. **Activity reports:** below-par history, distributor orders/receipts,
+   inter-store requests/transfers, payments and outstanding settlements,
+   adjustments/reversals — weekly, monthly, seasonal; exportable.
+2. **Combined distributor orders:** merge eligible store orders to hit case
+   minimums/delivery thresholds, with per-store allocation sheets.
+3. **AI-assisted reservation advice (optional):** drafts a recommendation from
+   stock, par, freshness, movement and season — shows its supporting facts,
+   never approves or moves stock itself. Deterministic math stays
+   authoritative for quantities.
+4. **Seasonal placement suggestions:** experimental, owner-controlled, only
+   once reliable history and layout data exist.
+
+---
+
+## 9. Data model (target shape; P0a uses only the parts it needs)
+
+**Shared catalogue:** `catalog_products` (id, barcode unique, name, size,
+base_unit, units_per_case, active).
+
+**Store-private:** `stores`; `store_products` (store_id, product_id,
+distributor, section, target_units, safety_buffer_units, active);
+`inventory_snapshots` (store_id, product_id, on_hand_units,
+reserved_outbound_units, source, source_timestamp, updated_at);
+`inventory_events` (store_id, product_id, event_type, quantity_delta_units,
+source_reference, occurred_at, created_by, reversal_of_event_id);
+`purchase_orders` + `purchase_order_lines`;
+`pending_pos_entries` (store_id, source_event_id, description,
+suggested_adjustment_units, status: pending/entered/skipped, entered_at).
+
+**Shared coordination:** `transfer_requests` (from/to store, status,
+timestamps); `transfer_lines` (requested/approved/picked_up/delivered units);
+`transfer_events` (event_type, quantity, performed_by, occurred_at,
+idempotency_key, reversal_of_event_id); `transfer_payments` (amount, currency,
+payer, payee, status, reference, paid_at).
+
+**Export script telemetry:** `pos_export_runs` (store_id, ran_at, status,
+row_count, error).
+
+---
+
+## 10. Deterministic redistribution rules
+
+1. Never recommend more than the giver's calculated transferable quantity.
+2. Subtract existing reservations before computing surplus.
+3. Respect the giver's par and safety buffer.
+4. Require confirmation (or block suggestion) on stale data.
+5. Prefer a partner only when the transfer is operationally worthwhile.
+6. The giving store always approves; nothing moves automatically.
+7. Reserve approved units atomically.
+8. Use actual pickup/delivery quantities for inventory movements.
+9. Fall back to a distributor order when no partner confirms surplus.
+10. Show the arithmetic behind every suggestion.
+
+---
+
+## 11. Security by phase
+
+- **P0a/P0b:** local browser data, no accounts, manual backup — risk accepted
+  for speed.
+- **P1+ (mandatory once data is in the cloud):** authenticated store access;
+  database-enforced store isolation; encrypted transport; basic event/error
+  logs; tested backup and recovery.
+- **P1.5:** script credentials live only on the store machine; outbound-only
+  traffic; minimal run log.
+- Staff accounts, roles, approval limits: future, not required.
+
+---
+
+## 12. Testing (minimum scenarios)
+
+**P0a/P0b:** re-import preserves pars; cases↔bottles conversion correct; pack
+rounding correct; open order not suggested twice (P0b); cancel restores
+requirement (P0b); backup export/restore round-trips; main flow usable
+one-handed on a mid-range Android.
+
+**P1/P1.5:** Store A cannot read/edit Store B's records; offline changes sync
+or error visibly; a dead export script shows the store as stale; a re-uploaded
+identical export causes no double-counting.
+
+**P2:** two simultaneous reservations cannot claim the same stock; partial
+approval/delivery quantities correct; repeated status calls have no duplicate
+inventory effect; pickup reduces giver, delivery increases receiver; reversal
+restores totals with an audit trail; payment status independent of delivery
+status; every pickup/delivery generates its pending-POS-entry prompts.
+
+---
+
+## 13. Risks and mitigations
+
+- **Export quality** — verify real files week one (§2); the importer validates
+  and reports bad rows instead of silently skipping.
+- **Snapshot staleness before the script exists** — timestamps everywhere;
+  giving store confirms before any transfer; P1.5 shortens the gap.
+- **P0 data loss (localStorage)** — JSON backup + reminder; source files
+  retained; cloud persistence in P1. Consciously accepted for the MVP.
+- **Manual POS entry drift** — the pending-entries list makes the gap visible
+  and finite instead of invisible; the next export reconciles reality anyway.
+- **Transfer workflow complexity** — P2 treated as a major transactional
+  phase; event history + transactions; failure paths tested before rollout;
+  limited-product pilot first.
+- **Shared login can't identify individuals** — accepted under the current
+  trust model; store-level attribution retained; revisit only if experience
+  demands it.
+- **Payment disputes** — record agreed value, delivered quantity, reference,
+  and a disputed state; the app never adjudicates.
+
+---
+
+## 14. Build order
+
+1. Verify the real export columns (Store A) and document them.
+2. Build P0a against real files; test on the target phone.
+3. Run P0a through real weekly reorder cycles; collect friction.
+4. Build P0b in the order real use demands.
+5. Run the three-store barcode spot-check (20 common products).
+6. P1: cloud model, store isolation, event history, dashboard.
+7. P1.5: export script at Store A; prove it for a few weeks; roll to B and C.
+8. P2: shared catalogue → availability → reservations → transfer workflow →
+   payments; pilot on a limited product set.
+9. P3: reports first, then optional AI advice and seasonal features.
+
+---
+
+## 15. Out of scope (all phases as planned)
+
+POS write-back by the script (workaround investigated separately); payment
+processing; true live POS feeds (until the export cadence proves itself);
+individual staff accounts and roles; sales forecasting; AI-made ordering or
+transfer decisions.
