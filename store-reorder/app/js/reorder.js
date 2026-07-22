@@ -45,6 +45,8 @@ export function suggestedCases(p, coverMonths = DEFAULT_COVER_MONTHS) {
   return Math.ceil(s / p.packSize);
 }
 
+// Sorted by sales velocity (what sells most) so the money items lead;
+// shortage ratio breaks ties and orders manual-par items without sales data.
 export function lowStock(products, coverMonths = DEFAULT_COVER_MONTHS) {
   return activeProducts(products)
     .filter((p) => {
@@ -57,8 +59,29 @@ export function lowStock(products, coverMonths = DEFAULT_COVER_MONTHS) {
       parSource: parSource(p),
       shortageUnits: shortageUnits(p, coverMonths),
       suggestedCases: suggestedCases(p, coverMonths),
+      monthsActive: p.salesMonths ? p.salesMonths.filter((m) => m > 0).length : null,
     }))
-    .sort((a, b) => b.shortageUnits / b.effParUnits - a.shortageUnits / a.effParUnits);
+    .sort((a, b) =>
+      (b.avgMonthlyUnits ?? -1) - (a.avgMonthlyUnits ?? -1) ||
+      b.shortageUnits / b.effParUnits - a.shortageUnits / a.effParUnits);
+}
+
+// Priority tiers for the Low Stock screen. Slow movers (auto-flagged, under
+// TIER_STEADY sales/month — where limited editions live) are separated so
+// they never drown the list; a manual par always promotes an item to
+// priority, because the owner set it on purpose.
+export const TIER_FAST = 30;
+export const TIER_STEADY = 6;
+
+export function lowStockTiers(products, coverMonths = DEFAULT_COVER_MONTHS) {
+  const all = lowStock(products, coverMonths);
+  const fast = [], steady = [], slow = [];
+  for (const p of all) {
+    if (p.parSource === "auto" && p.avgMonthlyUnits < TIER_STEADY) slow.push(p);
+    else if ((p.avgMonthlyUnits ?? 0) >= TIER_FAST) fast.push(p);
+    else steady.push(p);
+  }
+  return { fast, steady, slow, all };
 }
 
 // Zero list stays meaningful at 8k products: only items that actually sell
