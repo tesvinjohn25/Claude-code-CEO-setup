@@ -53,24 +53,42 @@ const notice = await page.textContent("#import-report .notice.ok");
 if (!notice.includes("Imported 40 products")) fail(`unexpected import notice: ${notice}`);
 await shot("2-import-done");
 
-// Set a par: Johnnie Walker Black to 5 cases.
+// Set a par: Johnnie Walker Black to 5 cases. Type letter-by-letter to
+// catch the focus-loss regression (re-rendering the input closed the
+// phone keyboard after every keystroke).
 await page.click('[data-tab="inventory"]');
-await page.fill("#inv-search", "Johnnie Walker Black");
+await page.click("#inv-search");
+await page.locator("#inv-search").pressSequentially("Johnnie Walker Black", { delay: 25 });
+const focusedId = await page.evaluate(() => document.activeElement?.id);
+if (focusedId !== "inv-search") fail("search input lost focus while typing");
+const typed = await page.inputValue("#inv-search");
+if (typed !== "Johnnie Walker Black") fail(`search text mangled: "${typed}"`);
 await page.click('.item[data-barcode="080432400630"]');
 await page.fill("#par-cases", "5");
 await page.fill("#par-bottles", "0");
 await shot("3-par-editor");
 await page.click("#par-save");
 
-// Low-stock list should now show it, short 1 case.
+// Low-stock list should now show it, short 1 case, with the summary strip
+// and the tab badge.
 await page.click('[data-tab="low"]');
 const lowText = await page.textContent("#view");
 if (!lowText.includes("Johnnie Walker Black")) fail("low-stock list missing the below-par product");
 if (!lowText.includes("1 cs (pack of 12)")) fail("suggestion arithmetic not shown");
+if (!lowText.includes("item to order")) fail("summary strip missing");
+const badge = await page.textContent('[data-tab="low"]');
+if (!badge.includes("1")) fail("Low Stock tab badge missing");
 await shot("4-low-stock");
 
-// Order sheet for its distributor.
-await page.click('[data-tab="orders"]');
+// The needs-par shortcut filters inventory to products without a par.
+await page.click("#go-needs-par");
+const needsParCount = await page.locator("#inv-list .item").count();
+if (needsParCount !== 39) fail(`needs-par filter shows ${needsParCount}, expected 39`);
+await page.click("#clear-needs-par");
+
+// Summary strip button jumps straight to the order sheets.
+await page.click('[data-tab="low"]');
+await page.click("#go-orders");
 const sheet = await page.textContent("pre.sheet");
 if (!sheet.includes("ORDER — Southern Glazers")) fail("order sheet missing distributor header");
 if (!sheet.includes("1 cs — Johnnie Walker Black 750ml")) fail("order sheet missing suggestion line");
