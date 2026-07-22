@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { importExport } from "../app/js/importer.js";
-import { lowStock, zeroStock, needsInventoryFix, effectivePar, orderSuggestions } from "../app/js/reorder.js";
+import { lowStock, lowStockTiers, TIER_FAST, TIER_STEADY, zeroStock, needsInventoryFix, effectivePar, orderSuggestions } from "../app/js/reorder.js";
 import { sheetText, explainSuggestion } from "../app/js/ordersheet.js";
 
 // Anonymized sample with the REAL LiquorPOS export structure: BRAND, DESCRIP,
@@ -108,6 +108,36 @@ describe("real LiquorPOS format", () => {
     expect(explainSuggestion(item)).toBe(
       `sells ~${item.avgMonthlyUnits}/mo − on hand ${Math.max(0, item.onHandUnits)} → order ${item.suggestedCases}`,
     );
+  });
+
+  test("low list is sorted by sales velocity, fastest first", () => {
+    const low = lowStock(products, 1);
+    for (let i = 1; i < low.length; i++) {
+      expect(low[i - 1].avgMonthlyUnits).toBeGreaterThanOrEqual(low[i].avgMonthlyUnits);
+    }
+  });
+
+  test("tiers split by velocity; slow tier holds the under-6/mo items", () => {
+    const t = lowStockTiers(products, 1);
+    expect(t.fast.length + t.steady.length + t.slow.length).toBe(t.all.length);
+    for (const p of t.fast) expect(p.avgMonthlyUnits).toBeGreaterThanOrEqual(TIER_FAST);
+    for (const p of t.steady) expect(p.avgMonthlyUnits).toBeGreaterThanOrEqual(TIER_STEADY);
+    for (const p of t.slow) {
+      expect(p.avgMonthlyUnits).toBeLessThan(TIER_STEADY);
+      expect(p.parSource).toBe("auto");
+      expect(p.monthsActive).toBeGreaterThanOrEqual(0); // limited-edition tag data
+    }
+  });
+
+  test("a manual par promotes a slow item out of the slow tier", () => {
+    const t1 = lowStockTiers(products, 1);
+    const slowItem = t1.slow[0];
+    expect(slowItem).toBeDefined();
+    products[slowItem.barcode].parUnits = slowItem.effParUnits + 5;
+    const t2 = lowStockTiers(products, 1);
+    expect(t2.slow.find((p) => p.barcode === slowItem.barcode)).toBeUndefined();
+    expect([...t2.fast, ...t2.steady].find((p) => p.barcode === slowItem.barcode)).toBeDefined();
+    products[slowItem.barcode].parUnits = null;
   });
 
   test("re-import preserves manual pars and stays idempotent", () => {

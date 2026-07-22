@@ -1,7 +1,7 @@
 import { StorageAdapter } from "./store.js";
 import { importExport } from "./importer.js";
 import { toUnits, toCasesBottles, formatUnits } from "./units.js";
-import { lowStock, zeroStock, unsetPar, needsInventoryFix, orderSuggestions, effectivePar, DEFAULT_COVER_MONTHS } from "./reorder.js";
+import { lowStock, lowStockTiers, TIER_FAST, TIER_STEADY, zeroStock, unsetPar, needsInventoryFix, orderSuggestions, effectivePar, DEFAULT_COVER_MONTHS } from "./reorder.js";
 import { sheetText, explainSuggestion, qtyLabel } from "./ordersheet.js";
 import { exportBackup, importBackup } from "./backup.js";
 import { loadDemoData } from "./demo.js";
@@ -66,9 +66,11 @@ function render() {
   else renderData();
 }
 
-// Red count on the Low Stock tab so the situation is visible from any screen.
+// Red count on the Low Stock tab: PRIORITY items only (fast + steady +
+// manual pars) — slow movers don't shout from the tab bar.
 function updateTabBadge() {
-  const n = lowStock(state.products, cover()).length;
+  const t = lowStockTiers(state.products, cover());
+  const n = t.fast.length + t.steady.length;
   const btn = document.querySelector('[data-tab="low"]');
   btn.innerHTML = n > 0 ? `Low&nbsp;Stock <span class="count">${n}</span>` : "Low&nbsp;Stock";
 }
@@ -80,8 +82,31 @@ function stockBar(p) {
   return `<div class="stockbar"><div class="${onHand === 0 ? "zero" : "low"}" style="width:${Math.max(pct, 3)}%"></div></div>`;
 }
 
+function lowItemHtml(p, tierKey) {
+  const soldTag = tierKey === "slow" && p.monthsActive != null
+    ? ` · sold in ${p.monthsActive}/4 mo`
+    : "";
+  const sub = [p.distributor, p.parSource === "auto" ? `auto target (${cover()} mo)` : "manual par"]
+    .filter(Boolean).join(" · ") + soldTag;
+  return `
+    <div class="item" data-barcode="${esc(p.barcode)}">
+      <div style="flex:1">
+        <div class="name">${esc(p.name)} <span class="sub">${esc(p.size)}</span></div>
+        <div class="sub">${esc(sub)}</div>
+        ${stockBar(p)}
+        <div class="explain">${esc(explainSuggestion(p))}</div>
+      </div>
+      <div class="qty">
+        <span class="badge ${Math.max(0, p.onHandUnits) === 0 ? "zero" : "low"}">order ${qtyLabel(p.suggestedCases, p.packSize)}</span>
+        <div class="sub">${formatUnits(p.onHandUnits, p.packSize)} / ${formatUnits(p.effParUnits, p.packSize)}</div>
+      </div>
+    </div>`;
+}
+
 function renderLow() {
-  const low = lowStock(state.products, cover());
+  const tiers = lowStockTiers(state.products, cover());
+  const low = tiers.all;
+  const priority = tiers.fast.length + tiers.steady.length;
   const zero = zeroStock(state.products);
   const noPar = unsetPar(state.products);
   const fixes = needsInventoryFix(state.products);
@@ -90,14 +115,13 @@ function renderLow() {
   if (low.length > 0) {
     const allPacked = low.every((p) => p.packSize > 1);
     const total = low.reduce((s, p) => s + p.suggestedCases, 0);
-    const distributors = new Set(low.map((p) => p.distributor).filter(Boolean));
-    const distText = distributors.size > 0
-      ? ` across <b>${distributors.size}</b> distributor${distributors.size === 1 ? "" : "s"}`
+    const slowText = tiers.slow.length > 0
+      ? ` — <b>${priority}</b> priority · <b>${tiers.slow.length}</b> slow`
       : "";
     html += `
       <div class="card summary-row">
-        <div><b>${low.length}</b> item${low.length === 1 ? "" : "s"} to order ·
-             <b>${total}</b> ${allPacked ? "cs" : "units"}${distText}</div>
+        <div><b>${low.length}</b> item${low.length === 1 ? "" : "s"} to order
+             (<b>${total}</b> ${allPacked ? "cs" : "units"})${slowText}</div>
         <button class="action" id="go-orders">Order sheets →</button>
       </div>`;
   }
@@ -109,23 +133,24 @@ function renderLow() {
     html += `<button class="notice warn linklike" id="go-needs-par">${noPar.length} product${noPar.length === 1 ? " has" : "s have"} no par level yet — tap to set them ›</button>`;
   }
 
-  html += `<h2>Below target (${low.length})</h2><div class="card">`;
-  html += low.length === 0
-    ? `<div class="empty">Nothing below target. 🎉</div>`
-    : low.map((p) => `
-        <div class="item" data-barcode="${esc(p.barcode)}">
-          <div style="flex:1">
-            <div class="name">${esc(p.name)} <span class="sub">${esc(p.size)}</span></div>
-            <div class="sub">${esc([p.distributor, p.parSource === "auto" ? `auto target (${cover()} mo)` : "manual par"].filter(Boolean).join(" · "))}</div>
-            ${stockBar(p)}
-            <div class="explain">${esc(explainSuggestion(p))}</div>
-          </div>
-          <div class="qty">
-            <span class="badge ${Math.max(0, p.onHandUnits) === 0 ? "zero" : "low"}">order ${qtyLabel(p.suggestedCases, p.packSize)}</span>
-            <div class="sub">${formatUnits(p.onHandUnits, p.packSize)} / ${formatUnits(p.effParUnits, p.packSize)}</div>
-          </div>
-        </div>`).join("");
-  html += `</div>`;
+  if (low.length === 0) {
+    html += `<h2>Below target (0)</h2><div class="card"><div class="empty">Nothing below target. 🎉</div></div>`;
+  } else {
+    const tierDefs = [
+      ["fast", `🔥 Fast movers (${TIER_FAST}+/mo)`, true],
+      ["steady", tiers.fast.length || tiers.slow.length ? "Steady sellers" : "Below target", true],
+      ["slow", `Slow &amp; limited (under ${TIER_STEADY}/mo)`, false],
+    ];
+    for (const [key, label, open] of tierDefs) {
+      const items = tiers[key];
+      if (items.length === 0) continue;
+      html += `
+        <details class="card tier" ${open ? "open" : ""}>
+          <summary>${label} (${items.length})</summary>
+          ${items.map((p) => lowItemHtml(p, key)).join("")}
+        </details>`;
+    }
+  }
 
   html += `<h2>Zero stock, still selling (${zero.length})</h2><div class="card">`;
   html += zero.length === 0
