@@ -12,21 +12,27 @@ export function suggestedCases(product) {
   return Math.ceil(s / product.packSize);
 }
 
+// Delisted products (active === false) are excluded from every list; they
+// exist only so a returning product keeps its par.
+function activeProducts(products) {
+  return Object.values(products).filter((p) => p.active !== false);
+}
+
 export function lowStock(products) {
-  return Object.values(products)
+  return activeProducts(products)
     .filter((p) => p.parUnits != null && p.onHandUnits < p.parUnits)
     .map((p) => ({ ...p, shortageUnits: shortageUnits(p), suggestedCases: suggestedCases(p) }))
     .sort((a, b) => b.shortageUnits / b.parUnits - a.shortageUnits / a.parUnits);
 }
 
 export function zeroStock(products) {
-  return Object.values(products)
+  return activeProducts(products)
     .filter((p) => p.onHandUnits === 0)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function unsetPar(products) {
-  return Object.values(products).filter((p) => p.parUnits == null);
+  return activeProducts(products).filter((p) => p.parUnits == null);
 }
 
 // Group order suggestions by distributor for the order sheets.

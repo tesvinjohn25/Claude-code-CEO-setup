@@ -59,6 +59,15 @@ describe("reorder math (plan §4.4, §10, §12)", () => {
     expect(zero.map((p) => p.barcode)).toEqual(["721059001106"]); // Buffalo Trace, On Hand 0
   });
 
+  test("inactive (delisted) products are excluded from all lists", () => {
+    const products = loadWithPars({ "080432400630": 60, "721059001106": 24 });
+    products["080432400630"].active = false; // delist Johnnie Walker (below par)
+    products["721059001106"].active = false; // delist Buffalo Trace (zero stock)
+    expect(lowStock(products).length).toBe(0);
+    expect(zeroStock(products).length).toBe(0);
+    expect(orderSuggestions(products).length).toBe(0);
+  });
+
   test("suggestions group by distributor, sorted", () => {
     const products = loadWithPars({
       "080432400630": 60,  // Johnnie Walker Black — Southern Glazers, short 6 → 1 cs
