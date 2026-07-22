@@ -26,7 +26,9 @@ store-reorder/test/simulate-weeks.js`.
 | §3 StorageAdapter seam for P1; corrupt storage safe | `store.js` | `backup.test.js` StorageAdapter cases | ✅ |
 | §12 Usable one-handed on mid-range Android | `style.css` (52px targets, bottom tabs) | `mobile-check.js` full flow at 393×851, screenshots 1–5 | ✅ |
 | §12 Multi-cycle real use holds up (weekly re-imports, delist/return, bad rows, restore) | importer `active` flag, input clamping | `simulate-weeks.js` 6-week run, ~1400 assertions | ✅ |
-| §3 Deployed on GitHub Pages | `app/` is pure static | — | ⬜ pending: enable Pages for `store-reorder/app` |
-| §15.1 Real export columns verified | `posAdapter.js` `ACTIVE_FORMAT` | — | ⬜ **pending real file** — running on synthetic format `fake-v1`; relink steps in README |
+| §3 Deployed on GitHub Pages | `app/` is pure static | Pages deploys green since PR #1 | ✅ |
+| §15.1 Real export columns verified + relinked | `posAdapter.js` `REAL_EXPORT_FORMAT` (auto-detected) | `realformat.test.js` (13 tests on anonymized real-structure fixture); `real-format-check.js` E2E (xlsx import → auto targets → fix list → order sheet → par override) | ✅ |
+| §2.1 Owner's rule (low when on-hand < monthly avg) | `reorder.js` `effectivePar` | `realformat.test.js`; full real file: app flags 570 vs POS report's 589 (diff = merged dupes + ceil/negative handling) | ✅ |
+| §2.1 Full-file scale (7,984 rows) | import + render paths, row cap | real-file run: import 584ms, tab renders <250ms, storage 1.9MB, reload 179ms | ✅ (local run; file not committed) |
 | §13.7 Human gate: value moment (owner approves an order sheet) | — | owner sign-off | ⬜ pending |
 | §13.7 Human gate: one real weekly cycle before P0b | — | owner sign-off | ⬜ pending |

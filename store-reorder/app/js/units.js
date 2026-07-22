@@ -20,6 +20,7 @@ export function toCasesBottles(units, packSize) {
 }
 
 export function formatUnits(units, packSize) {
+  if (packSize <= 1) return `${Math.max(0, Number(units) || 0)}`; // pack unknown: plain units
   const { cases, bottles } = toCasesBottles(units, packSize);
   if (cases === 0) return `${bottles} btl`;
   if (bottles === 0) return `${cases} cs`;

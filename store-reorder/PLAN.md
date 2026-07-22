@@ -59,6 +59,27 @@ If cross-store barcodes turn out messy, P2 adds a small product-matching/alias
 step; discovering that now costs an afternoon, discovering it in P2 costs a
 redesign.
 
+### 2.1 Real export findings (verified 2026-07-22, owner-confirmed)
+
+The real LiquorPOS export (7,984 rows) differs from the original assumptions:
+
+- Columns are BRAND, DESCRIP, SIZE, QTY_ON_HND, and four monthly unit-sales
+  columns (FIRST..FOURT) plus their average. **No barcode, pack size, vendor,
+  or department yet** — the owner confirmed those can be added to the export
+  later; until then identity is brand|descrip|size, orders are in units, and
+  order sheets are a single list.
+- **Owner's confirmed reorder rule: flag when on-hand < average monthly
+  sales.** Implemented as the auto target (configurable months of cover);
+  manual pars override per product.
+- **Negative on-hand is expected data** (deliveries sold before the inventory
+  update); imported as-is, counted as 0 in order math, and surfaced as a
+  "needs inventory fix" list. Periodic inventory updates in the POS reset it.
+- **~66% of the catalog has zero sales** — intentional (kept for rare special
+  orders). Dead items never alert; they stay searchable.
+- Duplicate brand|descrip|size rows exist (64) — merged by summing.
+- The app imports the .xlsx directly (first sheet; the export's other sheets
+  are derived reports and are ignored).
+
 ---
 
 ## 3. P0a — the MVP kernel (build this first, ship in days)

@@ -67,15 +67,17 @@ describe("POS export import (plan §3.1, §12)", () => {
       { line: 3, reason: "missing barcode" },
       { line: 4, reason: 'invalid pack size "zero"' },
       { line: 5, reason: 'invalid on-hand quantity "-3"' },
-      { line: 6, reason: "duplicate barcode 111" },
     ]);
+    // Duplicate rows merge quantities (real exports list some SKUs twice).
+    expect(report.merged).toBe(1);
+    expect(products["111"].onHandUnits).toBe(20);
   });
 
-  test("missing expected columns fails loudly and keeps existing data", () => {
+  test("unrecognized format fails loudly and keeps existing data", () => {
     const existing = importExport(FIXTURE, {}).products;
     const { products, report } = importExport("Wrong,Header\n1,2", existing);
     expect(report.ok).toBe(false);
-    expect(report.error).toContain("missing expected column");
+    expect(report.error).toContain("unrecognized export format");
     expect(products).toEqual(existing);
   });
 

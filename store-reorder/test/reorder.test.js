@@ -53,10 +53,12 @@ describe("reorder math (plan §4.4, §10, §12)", () => {
     expect(low[0].suggestedCases).toBe(1);
   });
 
-  test("zero-stock products are listed regardless of par", () => {
-    const products = loadWithPars({});
-    const zero = zeroStock(products);
-    expect(zero.map((p) => p.barcode)).toEqual(["721059001106"]); // Buffalo Trace, On Hand 0
+  test("zero-stock lists only products that sell or have a par (dead catalog stays quiet)", () => {
+    // No pars, no sales history → nothing qualifies.
+    expect(zeroStock(loadWithPars({})).length).toBe(0);
+    // Give Buffalo Trace (on hand 0) a par → it appears.
+    const products = loadWithPars({ "721059001106": 24 });
+    expect(zeroStock(products).map((p) => p.barcode)).toEqual(["721059001106"]);
   });
 
   test("inactive (delisted) products are excluded from all lists", () => {
@@ -109,7 +111,7 @@ describe("reorder math (plan §4.4, §10, §12)", () => {
     const products = loadWithPars({ "080432400630": 60 });
     const [item] = lowStock(products);
     expect(explainSuggestion(item)).toBe(
-      "par 5 cs − on hand 4 cs 6 btl = short 6 btl → 1 cs (pack of 12)",
+      "par 5 cs − on hand 4 cs 6 btl = short 6 → 1 cs (pack of 12)",
     );
   });
 });
