@@ -2,7 +2,7 @@
 // RELINK POINT — the only file that knows what the POS export looks like.
 //
 // Today ACTIVE_FORMAT describes the synthetic fixture in
-// test/fixtures/fake-liquorpos-export.csv. When the real LiquorPOS export
+// app/demo-data.csv. When the real LiquorPOS export
 // arrives: add a new format object with the real column names (and any
 // parsing quirks), point ACTIVE_FORMAT at it, and re-run the test suite.
 // Nothing outside this file should ever mention a POS column name.

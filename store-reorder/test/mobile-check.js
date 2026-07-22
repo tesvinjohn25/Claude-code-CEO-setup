@@ -45,7 +45,7 @@ await page.setInputFiles(
   {
     name: "fake-liquorpos-export.csv",
     mimeType: "text/csv",
-    buffer: Buffer.from(readFileSync(join(here, "fixtures", "fake-liquorpos-export.csv"))),
+    buffer: Buffer.from(readFileSync(join(appDir, "demo-data.csv"))),
   },
 );
 await page.waitForSelector("#import-report .notice.ok");
@@ -81,6 +81,15 @@ await page.reload();
 await page.click('[data-tab="low"]');
 const afterReload = await page.textContent("#view");
 if (!afterReload.includes("Johnnie Walker Black")) fail("state did not survive reload");
+
+// Demo button: clear storage, load demo data from the empty state.
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.click("#load-demo");
+await page.waitForSelector(".badge.low");
+const demoText = await page.textContent("#view");
+if (!demoText.includes("Johnnie Walker Black")) fail("demo data did not load");
+await shot("6-demo-loaded");
 
 console.log("PASS: import → par → low stock → order sheet, state persisted.");
 console.log("Screenshots in", outDir);
