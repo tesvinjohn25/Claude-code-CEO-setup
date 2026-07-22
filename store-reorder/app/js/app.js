@@ -10,6 +10,7 @@ const storage = new StorageAdapter();
 let state = storage.load();
 let currentTab = "low";
 let inventoryFilter = "";
+let needsParOnly = false;
 
 const view = document.getElementById("view");
 const freshness = document.getElementById("freshness");
@@ -54,10 +55,25 @@ function render() {
     return;
   }
 
+  updateTabBadge();
+
   if (currentTab === "low") renderLow();
   else if (currentTab === "inventory") renderInventory();
   else if (currentTab === "orders") renderOrders();
   else renderData();
+}
+
+// Red count on the Low Stock tab so the situation is visible from any screen.
+function updateTabBadge() {
+  const n = lowStock(state.products).length;
+  const btn = document.querySelector('[data-tab="low"]');
+  btn.innerHTML = n > 0 ? `Low&nbsp;Stock <span class="count">${n}</span>` : "Low&nbsp;Stock";
+}
+
+// Mini bar showing on-hand relative to par — scannable without reading numbers.
+function stockBar(p) {
+  const pct = Math.max(0, Math.min(100, Math.round((p.onHandUnits / p.parUnits) * 100)));
+  return `<div class="stockbar"><div class="${p.onHandUnits === 0 ? "zero" : "low"}" style="width:${Math.max(pct, 3)}%"></div></div>`;
 }
 
 function renderLow() {
@@ -66,8 +82,19 @@ function renderLow() {
   const noPar = unsetPar(state.products);
   let html = "";
 
+  if (low.length > 0) {
+    const distributors = new Set(low.filter((p) => p.suggestedCases > 0).map((p) => p.distributor));
+    const totalCases = low.reduce((s, p) => s + p.suggestedCases, 0);
+    html += `
+      <div class="card summary-row">
+        <div><b>${low.length}</b> item${low.length === 1 ? "" : "s"} to order ·
+             <b>${totalCases}</b> cs across <b>${distributors.size}</b> distributor${distributors.size === 1 ? "" : "s"}</div>
+        <button class="action" id="go-orders">Order sheets →</button>
+      </div>`;
+  }
+
   if (noPar.length > 0) {
-    html += `<div class="notice warn">${noPar.length} product${noPar.length === 1 ? " has" : "s have"} no par level yet — set them in Inventory to include them here.</div>`;
+    html += `<button class="notice warn linklike" id="go-needs-par">${noPar.length} product${noPar.length === 1 ? " has" : "s have"} no par level yet — tap to set them ›</button>`;
   }
 
   html += `<h2>Below par (${low.length})</h2><div class="card">`;
@@ -75,14 +102,15 @@ function renderLow() {
     ? `<div class="empty">Nothing below par. 🎉</div>`
     : low.map((p) => `
         <div class="item">
-          <div>
+          <div style="flex:1">
             <div class="name">${esc(p.name)} <span class="sub">${esc(p.size)}</span></div>
             <div class="sub">${esc(p.distributor)} · ${esc(p.section)}</div>
+            ${stockBar(p)}
             <div class="explain">${esc(explainSuggestion(p))}</div>
           </div>
           <div class="qty">
-            <span class="badge ${p.onHandUnits === 0 ? "zero" : "low"}">${formatUnits(p.onHandUnits, p.packSize)}</span>
-            <div class="sub">par ${formatUnits(p.parUnits, p.packSize)}</div>
+            <span class="badge ${p.onHandUnits === 0 ? "zero" : "low"}">order ${p.suggestedCases} cs</span>
+            <div class="sub">${formatUnits(p.onHandUnits, p.packSize)} / par ${formatUnits(p.parUnits, p.packSize)}</div>
           </div>
         </div>`).join("");
   html += `</div>`;
@@ -100,11 +128,44 @@ function renderLow() {
         </div>`).join("");
   html += `</div>`;
   view.innerHTML = html;
+
+  document.getElementById("go-orders")?.addEventListener("click", () => {
+    currentTab = "orders";
+    render();
+  });
+  document.getElementById("go-needs-par")?.addEventListener("click", () => {
+    currentTab = "inventory";
+    needsParOnly = true;
+    inventoryFilter = "";
+    render();
+  });
 }
 
+// The search input is rendered ONCE and never rebuilt while typing — only the
+// list below it re-renders. Rebuilding the input on each keystroke destroys
+// focus and closes the phone keyboard.
 function renderInventory() {
+  view.innerHTML = `
+    <input type="search" id="inv-search" placeholder="Search products or sections" value="${esc(inventoryFilter)}">
+    ${needsParOnly ? `<button class="chip" id="clear-needs-par">Showing: needs par ✕</button>` : ""}
+    <div id="inv-list"></div>`;
+
+  document.getElementById("inv-search").addEventListener("input", (e) => {
+    inventoryFilter = e.target.value;
+    renderInventoryList();
+  });
+  document.getElementById("clear-needs-par")?.addEventListener("click", () => {
+    needsParOnly = false;
+    renderInventory();
+  });
+
+  renderInventoryList();
+}
+
+function renderInventoryList() {
   const q = inventoryFilter.toLowerCase();
   const all = Object.values(state.products)
+    .filter((p) => !needsParOnly || p.parUnits == null)
     .filter((p) => !q || p.name.toLowerCase().includes(q) || p.section.toLowerCase().includes(q))
     .sort((a, b) => a.section.localeCompare(b.section) || a.name.localeCompare(b.name));
 
@@ -114,7 +175,10 @@ function renderInventory() {
     bySection.get(p.section).push(p);
   }
 
-  let html = `<input type="search" id="inv-search" placeholder="Search products or sections" value="${esc(inventoryFilter)}">`;
+  let html = "";
+  if (all.length === 0) {
+    html = `<div class="empty">No matching products.</div>`;
+  }
   for (const [section, items] of bySection) {
     html += `<h2>${esc(section)}</h2><div class="card">`;
     html += items.map((p) => {
@@ -135,13 +199,10 @@ function renderInventory() {
     }).join("");
     html += `</div>`;
   }
-  view.innerHTML = html;
 
-  document.getElementById("inv-search").addEventListener("input", (e) => {
-    inventoryFilter = e.target.value;
-    renderInventory();
-  });
-  view.querySelectorAll(".item[data-barcode]").forEach((el) => {
+  const list = document.getElementById("inv-list");
+  list.innerHTML = html;
+  list.querySelectorAll(".item[data-barcode]").forEach((el) => {
     el.addEventListener("click", () => openParEditor(el.dataset.barcode));
   });
 }
@@ -189,6 +250,9 @@ function renderOrders() {
   let html = "";
   if (groups.length === 0) {
     html = `<div class="empty">No orders needed — nothing is below par.</div>`;
+  } else {
+    const totalCases = groups.reduce((s, g) => s + g.lines.reduce((s2, l) => s2 + l.suggestedCases, 0), 0);
+    html += `<div class="card summary-row"><div><b>${groups.length}</b> order sheet${groups.length === 1 ? "" : "s"} · <b>${totalCases}</b> cases total — copy each into WhatsApp or print</div></div>`;
   }
   for (const g of groups) {
     const text = sheetText(g, { storeName: state.storeName });
@@ -365,6 +429,7 @@ function renderDataHeaderOnly() {
 document.querySelectorAll(".tab").forEach((b) => {
   b.addEventListener("click", () => {
     currentTab = b.dataset.tab;
+    needsParOnly = false; // tab bar always opens the full inventory view
     render();
   });
 });
