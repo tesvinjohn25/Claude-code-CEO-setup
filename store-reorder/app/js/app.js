@@ -1,7 +1,7 @@
 import { StorageAdapter } from "./store.js";
 import { importExport } from "./importer.js";
 import { toUnits, toCasesBottles, formatUnits } from "./units.js";
-import { lowStock, lowStockTiers, TIER_FAST, TIER_STEADY, zeroStock, unsetPar, needsInventoryFix, orderSuggestions, effectivePar, DEFAULT_COVER_MONTHS } from "./reorder.js";
+import { lowStockTiers, TIER_FAST, TIER_STEADY, unsetPar, needsInventoryFix, orderSuggestions, effectivePar, DEFAULT_COVER_MONTHS } from "./reorder.js";
 import { sheetText, explainSuggestion, qtyLabel } from "./ordersheet.js";
 import { exportBackup, importBackup } from "./backup.js";
 import { loadDemoData } from "./demo.js";
@@ -86,7 +86,10 @@ function lowItemHtml(p, tierKey) {
   const soldTag = tierKey === "slow" && p.monthsActive != null
     ? ` · sold in ${p.monthsActive}/4 mo`
     : "";
-  const sub = [p.distributor, p.parSource === "auto" ? `auto target (${cover()} mo)` : "manual par"]
+  const urgency = p.runwayDays == null ? null
+    : Math.max(0, p.onHandUnits) === 0 ? "OUT NOW"
+    : `~${p.runwayDays} days left`;
+  const sub = [urgency, p.distributor, p.parSource === "auto" ? `auto target (${cover()} mo)` : "manual par"]
     .filter(Boolean).join(" · ") + soldTag;
   return `
     <div class="item" data-barcode="${esc(p.barcode)}">
@@ -107,7 +110,6 @@ function renderLow() {
   const tiers = lowStockTiers(state.products, cover());
   const low = tiers.all;
   const priority = tiers.fast.length + tiers.steady.length;
-  const zero = zeroStock(state.products);
   const noPar = unsetPar(state.products);
   const fixes = needsInventoryFix(state.products);
   let html = "";
@@ -152,18 +154,6 @@ function renderLow() {
     }
   }
 
-  html += `<h2>Zero stock, still selling (${zero.length})</h2><div class="card">`;
-  html += zero.length === 0
-    ? `<div class="empty">No selling products at zero.</div>`
-    : zero.slice(0, 100).map((p) => `
-        <div class="item">
-          <div>
-            <div class="name">${esc(p.name)} <span class="sub">${esc(p.size)}</span></div>
-            <div class="sub">${p.avgMonthlyUnits != null ? `sells ~${p.avgMonthlyUnits}/mo` : esc(p.distributor)}</div>
-          </div>
-          <div class="qty"><span class="badge zero">${p.onHandUnits < 0 ? p.onHandUnits : 0}</span></div>
-        </div>`).join("");
-  html += `</div>`;
   view.innerHTML = html;
 
   document.getElementById("go-orders")?.addEventListener("click", () => {

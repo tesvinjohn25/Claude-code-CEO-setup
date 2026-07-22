@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { importExport } from "../app/js/importer.js";
-import { shortageUnits, suggestedCases, lowStock, zeroStock, orderSuggestions } from "../app/js/reorder.js";
+import { shortageUnits, suggestedCases, lowStock, orderSuggestions } from "../app/js/reorder.js";
 import { sheetText, explainSuggestion } from "../app/js/ordersheet.js";
 
 const FIXTURE = readFileSync(
@@ -53,12 +53,11 @@ describe("reorder math (plan §4.4, §10, §12)", () => {
     expect(low[0].suggestedCases).toBe(1);
   });
 
-  test("zero-stock lists only products that sell or have a par (dead catalog stays quiet)", () => {
-    // No pars, no sales history → nothing qualifies.
-    expect(zeroStock(loadWithPars({})).length).toBe(0);
-    // Give Buffalo Trace (on hand 0) a par → it appears.
-    const products = loadWithPars({ "721059001106": 24 });
-    expect(zeroStock(products).map((p) => p.barcode)).toEqual(["721059001106"]);
+  test("low list sorts by urgency: emptiest shelf first", () => {
+    // Buffalo Trace at 0/24 (runway 0) outranks Johnnie Walker at 54/60.
+    const products = loadWithPars({ "080432400630": 60, "721059001106": 24 });
+    const low = lowStock(products);
+    expect(low.map((p) => p.barcode)).toEqual(["721059001106", "080432400630"]);
   });
 
   test("inactive (delisted) products are excluded from all lists", () => {
@@ -66,7 +65,6 @@ describe("reorder math (plan §4.4, §10, §12)", () => {
     products["080432400630"].active = false; // delist Johnnie Walker (below par)
     products["721059001106"].active = false; // delist Buffalo Trace (zero stock)
     expect(lowStock(products).length).toBe(0);
-    expect(zeroStock(products).length).toBe(0);
     expect(orderSuggestions(products).length).toBe(0);
   });
 
