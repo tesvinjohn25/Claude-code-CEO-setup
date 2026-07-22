@@ -35,6 +35,12 @@ const shot = (name) => page.screenshot({ path: join(outDir, `${name}.png`), full
 
 const fail = (msg) => { console.error("FAIL:", msg); process.exit(1); };
 
+// Low Stock tiers render collapsed by default (plan: less scrolling, tap to
+// expand). Tests that need to see inside a tier open it explicitly.
+const openAllTiers = () => page.evaluate(() => {
+  document.querySelectorAll("details.tier").forEach((d) => { d.open = true; });
+});
+
 await page.goto(base);
 await shot("1-empty-state");
 
@@ -70,14 +76,18 @@ await shot("3-par-editor");
 await page.click("#par-save");
 
 // Low-stock list should now show it, short 1 case, with the summary strip
-// and the tab badge.
+// and the tab badge. Tiers start collapsed — verify that, then open one via
+// its actual summary click (not the test helper) to prove the interaction.
 await page.click('[data-tab="low"]');
-const lowText = await page.textContent("#view");
-if (!lowText.includes("Johnnie Walker Black")) fail("low-stock list missing the below-par product");
-if (!lowText.includes("1 cs (pack of 12)")) fail("suggestion arithmetic not shown");
-if (!lowText.includes("item to order")) fail("summary strip missing");
+const collapsedText = await page.textContent("#view");
+if (!collapsedText.includes("item to order")) fail("summary strip missing");
+if (!collapsedText.includes("Johnnie Walker Black")) fail("collapsed tier content should still be in the DOM");
+if (await page.locator(".badge.low").first().isVisible()) fail("tier should start collapsed, not showing items");
 const badge = await page.textContent('[data-tab="low"]');
 if (!badge.includes("1")) fail("Low Stock tab badge missing");
+
+await page.locator("details.tier summary").first().click();
+if (!(await page.locator(".badge.low").first().isVisible())) fail("tier did not expand on tap");
 await shot("4-low-stock");
 
 // The needs-par shortcut filters inventory to products without a par.
@@ -104,7 +114,8 @@ if (!afterReload.includes("Johnnie Walker Black")) fail("state did not survive r
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.click("#load-demo");
-await page.waitForSelector(".badge.low");
+await page.waitForSelector(".summary-row, .empty");
+await openAllTiers();
 const demoText = await page.textContent("#view");
 if (!demoText.includes("Johnnie Walker Black")) fail("demo data did not load");
 await shot("6-demo-loaded");

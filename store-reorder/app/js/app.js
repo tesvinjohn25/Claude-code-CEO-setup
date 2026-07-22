@@ -138,16 +138,18 @@ function renderLow() {
   if (low.length === 0) {
     html += `<h2>Below target (0)</h2><div class="card"><div class="empty">Nothing below target. 🎉</div></div>`;
   } else {
+    // All tiers start collapsed so the screen opens on the category counts,
+    // not a long scroll — the owner taps into whichever tier matters right now.
     const tierDefs = [
-      ["fast", `🔥 Fast movers (${TIER_FAST}+/mo)`, true],
-      ["steady", tiers.fast.length || tiers.slow.length ? "Steady sellers" : "Below target", true],
-      ["slow", `Slow &amp; limited (under ${TIER_STEADY}/mo)`, false],
+      ["fast", `🔥 Fast movers (${TIER_FAST}+/mo)`],
+      ["steady", tiers.fast.length || tiers.slow.length ? "Steady sellers" : "Below target"],
+      ["slow", `Slow &amp; limited (under ${TIER_STEADY}/mo)`],
     ];
-    for (const [key, label, open] of tierDefs) {
+    for (const [key, label] of tierDefs) {
       const items = tiers[key];
       if (items.length === 0) continue;
       html += `
-        <details class="card tier" ${open ? "open" : ""}>
+        <details class="card tier">
           <summary>${label} (${items.length})</summary>
           ${items.map((p) => lowItemHtml(p, key)).join("")}
         </details>`;
